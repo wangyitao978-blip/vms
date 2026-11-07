@@ -152,25 +152,42 @@ jobs:
           set -euo pipefail
           mkdir build-android
           cd build-android
-          PKG_CONFIG="$PKG_CONFIG" ../configure \
-            --cross-prefix="$CROSS_WRAPPERS/" \
-            --cpu=aarch64 \
-            --target-list=aarch64-softmmu \
-            --host-cc=gcc \
-            --disable-werror \
-            --disable-docs --disable-guest-agent --disable-tools \
-            --disable-gtk --disable-sdl --disable-vnc --disable-opengl \
-            --disable-spice --disable-glusterfs --disable-libssh --disable-capstone \
-            --disable-slirp --disable-kvm --disable-curl --disable-libiscsi \
-            --disable-libnfs --disable-smartcard --disable-usb-redir --disable-u2f \
-            --disable-seccomp --disable-xen --disable-brlapi --disable-curses \
-            --disable-vte --disable-pipewire --disable-jack --disable-oss \
-            --disable-alsa --disable-vhost-user --disable-vhost-crypto \
-            --disable-vhost-vdpa --disable-vhost-net --disable-vhost-kernel \
-            --disable-libvduse --disable-virtfs --enable-pie
-          ninja -j2 qemu-system-aarch64
-          file qemu-system-aarch64
-          "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -d qemu-system-aarch64
+          set +e
+          {
+            PKG_CONFIG="$PKG_CONFIG" ../configure \
+              --cross-prefix="$CROSS_WRAPPERS/" \
+              --cpu=aarch64 \
+              --target-list=aarch64-softmmu \
+              --host-cc=gcc \
+              --disable-werror \
+              --disable-docs --disable-guest-agent --disable-tools \
+              --disable-gtk --disable-sdl --disable-vnc --disable-opengl \
+              --disable-spice --disable-glusterfs --disable-libssh --disable-capstone \
+              --disable-slirp --disable-kvm --disable-curl --disable-libiscsi \
+              --disable-libnfs --disable-smartcard --disable-usb-redir --disable-u2f \
+              --disable-seccomp --disable-xen --disable-brlapi --disable-curses \
+              --disable-vte --disable-pipewire --disable-jack --disable-oss \
+              --disable-alsa --disable-vhost-user --disable-vhost-crypto \
+              --disable-vhost-vdpa --disable-vhost-net --disable-vhost-kernel \
+              --disable-libvduse --disable-virtfs --enable-pie
+            configure_status=$?
+            if [ "$configure_status" -eq 0 ]; then
+              ninja -j2 qemu-system-aarch64
+            fi
+            build_status=$?
+            if [ "$build_status" -eq 0 ]; then
+              file qemu-system-aarch64
+              "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -d qemu-system-aarch64
+            fi
+            exit "$build_status"
+          } > ../qemu-configure-build.log 2>&1
+          result=$?
+          echo "QEMU configure/build exit code: $result"
+          echo "---- relevant diagnostics ----"
+          grep -nEi 'error:|fatal:|failed|not found|undefined reference|cannot find|unsupported|configure: error|ninja: build stopped' ../qemu-configure-build.log | tail -n 100 || true
+          echo "---- final log lines ----"
+          tail -n 100 ../qemu-configure-build.log
+          exit "$result"
 
       - name: Stage Android engine assets
         run: |
@@ -200,3 +217,11 @@ jobs:
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/src/main/assets/engine/arm64-v8a/
           retention-days: 14
+
+      - name: Upload QEMU build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-android-build-log
+          path: qemu-configure-build.log
+          retention-days: 7
