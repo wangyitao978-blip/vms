@@ -138,6 +138,12 @@ jobs:
           start = s.index("  elif compiler.get_id() == 'clang'\n")
           end = s.index("    # ok", start)
           s = s[:start] + "  elif compiler.get_id() == 'clang'\n" + s[end:]
+          # Android does not use QEMU's optional SafeStack instrumentation.
+          # Skip the compiler probe: NDK Clang rejects -fno-sanitize=safe-stack.
+          s = p.read_text()
+          start = s.index("# Compiles if SafeStack *not* enabled")
+          end = s.index("if get_option('safe_stack') and coroutine_backend", start)
+          s = s[:start] + s[end:]
           p.write_text(s)
           PY
 
