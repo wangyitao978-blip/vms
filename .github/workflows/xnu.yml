@@ -1,3 +1,4 @@
+# Rebuild trigger: verify the complete checked-in XNU patch series.
 name: xnu
 # Trigger a fresh kernel build after importing the complete upstream source tree.
 
