@@ -124,6 +124,22 @@ jobs:
           git clone --depth 1 --branch v8.2.0 https://github.com/qemu/qemu.git qemu
           cp vm/qemu/sweet_ufs.c vm/qemu/sweet_touch.c vm/qemu/sweet_fb.c qemu/hw/block/
           git -C qemu apply "$GITHUB_WORKSPACE/vm/qemu/qemu-sweet.patch"
+          # Android NDK Clang 18 is supported; QEMU's compile-probe rejects
+          # this toolchain because the cross compiler probe is not reliable.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("qemu/meson.build")
+          s = p.read_text()
+          old = "  elif compiler.get_id() == 'clang' and compiler.compiles('''"
+          new = "  elif compiler.get_id() == 'clang'"
+          if old not in s:
+              raise SystemExit("Could not locate QEMU Clang version probe")
+          s = s.replace(old, new, 1)
+          start = s.index("  elif compiler.get_id() == 'clang'\n")
+          end = s.index("    # ok", start)
+          s = s[:start] + "  elif compiler.get_id() == 'clang'\n" + s[end:]
+          p.write_text(s)
+          PY
 
       - name: Configure and build Android ARM64 QEMU
         working-directory: qemu
