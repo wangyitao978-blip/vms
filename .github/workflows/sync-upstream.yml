@@ -1,0 +1,48 @@
+name: Import vmios build sources
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout upstream vmios
+        uses: actions/checkout@v4
+        with:
+          repository: LQS686/vmios
+          ref: main
+          path: upstream
+
+      - name: Import source directories
+        run: |
+          set -e
+          for dir in xnu vm tools docs shim ghidra-scripts; do
+            rm -rf "$dir"
+            cp -a "upstream/$dir" "$dir"
+          done
+          for file in LICENSE CREDITS.md .gitignore NOTES.md; do
+            if [ -f "upstream/$file" ]; then
+              cp "upstream/$file" "$file"
+            fi
+          done
+
+      - name: Commit imported sources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add xnu vm tools docs shim ghidra-scripts LICENSE CREDITS.md .gitignore NOTES.md
+          if git diff --cached --quiet; then
+            echo "Sources are already up to date."
+          else
+            git commit -m "Import vmios kernel, VM and build sources"
+            git push
+          fi
