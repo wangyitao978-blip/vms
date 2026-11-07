@@ -69,7 +69,26 @@ jobs:
         env:
           # keep going after errors so one run reports every compile failure
           MAKEFLAGS: ${{ inputs.keep_going == 'false' && '' || '-k' }}
-        run: bash build.sh
+        run: |
+          set +e
+          bash build.sh > ../xnu-build.log 2>&1
+          result=$?
+          echo "XNU build exit code: $result"
+          echo "---- compiler diagnostics ----"
+          grep -nE '(^|: )(error:|fatal error:)|Error [0-9]+|BUILD FAILED|undefined symbol|No such file|not found' ../xnu-build.log | tail -n 120 || true
+          echo "---- end of diagnostics ----"
+          if [ "$result" -ne 0 ] && ! grep -qE 'error:|fatal error:|BUILD FAILED' ../xnu-build.log; then
+            tail -n 100 ../xnu-build.log
+          fi
+          exit "$result"
+
+      - name: Upload concise XNU build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xnu-build-log
+          path: xnu-build.log
+          retention-days: 7
 
       - name: Package build tree for local compiles
         if: always()
