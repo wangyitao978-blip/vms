@@ -46,7 +46,7 @@ jobs:
           index_url = base + "dists/stable/main/binary-aarch64/Packages.gz"
           data = gzip.decompress(urllib.request.urlopen(index_url, timeout=60).read()).decode()
           packages = {}
-          for block in data.split("\\n\\n"):
+          for block in data.split("\n\n"):
               if not block.strip():
                   continue
               msg = email.message_from_string(block)
@@ -65,7 +65,7 @@ jobs:
               selected.add(name)
               for dep in msg.get("Depends", "").split(","):
                   dep = dep.strip().split("|")[0].strip()
-                  dep = re.sub(r"\\s*\\([^)]*\\)", "", dep).strip()
+                  dep = re.sub(r"\s*\([^)]*\)", "", dep).strip()
                   dep = re.sub(r":any$", "", dep)
                   if dep and dep in packages and dep not in selected:
                       todo.append(dep)
