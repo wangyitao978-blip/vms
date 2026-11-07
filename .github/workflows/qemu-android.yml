@@ -170,9 +170,17 @@ jobs:
               --disable-alsa --disable-vhost-user --disable-vhost-crypto \
               --disable-vhost-vdpa --disable-vhost-net --disable-vhost-kernel \
               --disable-libvduse --disable-virtfs --enable-pie
+            echo "---- Termux GLib target metadata ----"
+            "$PKG_CONFIG" --cflags glib-2.0
+            "$PKG_CONFIG" --variable=prefix glib-2.0
+            grep -R "GLIB_SIZEOF_SIZE_T" "$SYSROOT/data/data/com.termux/files/usr/include/glib-2.0" "$SYSROOT/data/data/com.termux/files/usr/lib/glib-2.0/include" 2>/dev/null || true
             configure_status=$?
             if [ "$configure_status" -ne 0 ]; then
               echo "QEMU configure failed with exit code $configure_status"
+              if [ -f meson-logs/meson-log.txt ]; then
+                echo "---- Meson diagnostic log ----"
+                tail -n 180 meson-logs/meson-log.txt
+              fi
               false
             else
               ninja -j2 qemu-system-aarch64
@@ -228,5 +236,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: qemu-android-build-log
-          path: qemu-configure-build.log
+          path: qemu/qemu-configure-build.log
           retention-days: 7
