@@ -115,6 +115,23 @@ jobs:
           fi
           exit "$result"
 
+      - name: Build QEMU boot payload
+        run: |
+          set -euo pipefail
+          cp dxb/fakeroot/System/Library/Kernels/kernel.development.sweet kernel.development.sweet
+          python3 tools/mkadt.py qemu.adt --qemu --no-product --qemu-cpus 2
+          python3 tools/mkpayload.py kernel.development.sweet qemu.adt sweet-qemu-payload.bin --profile vm
+          file kernel.development.sweet sweet-qemu-payload.bin
+          ls -lh kernel.development.sweet sweet-qemu-payload.bin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sweet-qemu-payload
+          path: |
+            sweet-qemu-payload.bin
+            kernel.development.sweet
+          retention-days: 90
+
       - name: Upload concise XNU build log
         if: always()
         uses: actions/upload-artifact@v4
