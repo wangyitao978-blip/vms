@@ -17,7 +17,7 @@ diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFrame
 + * fields are uint32 values at offsets 4 and 8.
 + */
 +static void
-+sweet_fb_get_block(AppleCLCD *fb, uint64_t block, uint64_t offset,
++sweet_fb_get_block(uint64_t block, uint64_t offset,
 +    void *buffer, size_t size)
 +{
 +	uint8_t record[40];
@@ -67,7 +67,7 @@ diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFrame
 +			ret = kIOReturnUnsupported;
 +			break;
 +		}
-+		sweet_fb_get_block(fFB, args->scalarInput[0], args->scalarInput[1],
++		sweet_fb_get_block(args->scalarInput[0], args->scalarInput[1],
 +		    args->structureOutput, args->structureOutputSize);
 +		break;
  	case kSweetFBNotifications:
