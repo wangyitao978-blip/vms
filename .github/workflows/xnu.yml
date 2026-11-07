@@ -49,25 +49,28 @@ jobs:
           # used by newer XNU headers without changing existing member offsets.
           python3 - <<'PY'
           from pathlib import Path
-          candidates = [
-              Path("dxb/xnu/iokit/IOKit/IORPC.h"),
-              Path("dxb/xnu/iokit/DriverKit/IORPC.h"),
-          ]
-          for p in candidates:
-              if not p.is_file():
-                  continue
+          import re
+          matches = list(Path("dxb/xnu").rglob("IORPC.h"))
+          patched = []
+          for p in matches:
               s = p.read_text()
               if "struct IORPC {" not in s:
                   continue
-              if "kernelContent" not in s:
-                  old = "uint32_t replySize;"
-                  if old not in s:
-                      raise SystemExit(f"Cannot patch IORPC layout in {p}")
-                  s = s.replace(old, old + "\\n#ifdef KERNEL\\nIORPCMessage * kernelContent;\\n#endif /* KERNEL */", 1)
-                  p.write_text(s)
-                  print(f"Added Xcode 16 IIG compatibility member to {p}")
-              else:
-                  print(f"IORPC compatibility member already present in {p}")
+              if re.search(r"\bkernelContent\s*;", s):
+                  print(f"IORPC member already present in {p}")
+                  continue
+              # Xcode 16 IIG emits designated initializers for this field.
+              # Put it in the public IORPC definition used by the generated sources.
+              m = re.search(r"(struct IORPC\s*\{.*?\buint32_t\s+replySize\s*;)", s, re.S)
+              if not m:
+                  print(f"No replySize field in {p}")
+                  continue
+              s = s[:m.end()] + "\n#ifdef KERNEL\n    IORPCMessage * kernelContent;\n#endif /* KERNEL */" + s[m.end():]
+              p.write_text(s)
+              patched.append(str(p))
+          if not patched:
+              raise SystemExit("No IORPC.h definition patched; searched: " + ", ".join(map(str, matches)))
+          print("Patched IORPC definitions:", ", ".join(patched))
           PY
           # libfirehose_kernel is built arm64e-only; the SWEET kernel is plain arm64
           sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
