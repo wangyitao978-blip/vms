@@ -91,11 +91,11 @@ jobs:
           mkdir -p "$WRAPPERS"
           cat > "$WRAPPERS/gcc" <<EOF
           #!/bin/sh
-          exec "$TOOLCHAIN/aarch64-linux-android24-clang" -fuse-ld=lld "\$@"
+          exec "$TOOLCHAIN/aarch64-linux-android24-clang" "\$@"
           EOF
           cat > "$WRAPPERS/g++" <<EOF
           #!/bin/sh
-          exec "$TOOLCHAIN/aarch64-linux-android24-clang++" -fuse-ld=lld "\$@"
+          exec "$TOOLCHAIN/aarch64-linux-android24-clang++" "\$@"
           EOF
           for tool in ar nm strip ranlib objcopy; do
             cat > "$WRAPPERS/$tool" <<EOF
