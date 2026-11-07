@@ -171,15 +171,19 @@ jobs:
               --disable-vhost-vdpa --disable-vhost-net --disable-vhost-kernel \
               --disable-libvduse --disable-virtfs --enable-pie
             configure_status=$?
-            if [ "$configure_status" -eq 0 ]; then
-              ninja -j2 qemu-system-aarch64
+            if [ "$configure_status" -ne 0 ]; then
+              echo "QEMU configure failed with exit code $configure_status"
+              exit "$configure_status"
             fi
+            ninja -j2 qemu-system-aarch64
             build_status=$?
-            if [ "$build_status" -eq 0 ]; then
-              file qemu-system-aarch64
-              "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -d qemu-system-aarch64
+            if [ "$build_status" -ne 0 ]; then
+              echo "QEMU build failed with exit code $build_status"
+              exit "$build_status"
             fi
-            exit "$build_status"
+            file qemu-system-aarch64
+            "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -d qemu-system-aarch64
+            exit 0
           } > ../qemu-configure-build.log 2>&1
           result=$?
           echo "QEMU configure/build exit code: $result"
