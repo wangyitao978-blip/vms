@@ -62,12 +62,13 @@ jobs:
           p = Path("xnu/iokit/IOKit/IORPC.h")
           s = p.read_text()
           if not re.search(r"\bkernelContent\s*;", s):
-              pattern = r"(struct IORPC\s*\{.*?\buint32_t\s+replySize\s*;)"
-              m = re.search(pattern, s, flags=re.S)
-              if not m:
-                  raise SystemExit("Could not patch IORPC struct in " + str(p))
+              start = s.find("struct IORPC {")
+              end = s.find("replySize;", start) if start >= 0 else -1
+              if start < 0 or end < 0:
+                  raise SystemExit("Could not locate IORPC fields in " + str(p))
+              end += len("replySize;")
               addition = chr(10) + "#if KERNEL" + chr(10) + "    IORPCMessage * kernelContent;" + chr(10) + "#endif /* KERNEL */"
-              s = s[:m.end()] + addition + s[m.end():]
+              s = s[:end] + addition + s[end:]
               p.write_text(s)
               print("Patched", p)
           else:
