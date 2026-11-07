@@ -1,4 +1,5 @@
 name: xnu
+# Trigger a fresh kernel build after importing the complete upstream source tree.
 
 on:
   workflow_dispatch:
