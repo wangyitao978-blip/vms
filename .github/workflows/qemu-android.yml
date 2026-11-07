@@ -173,17 +173,18 @@ jobs:
             configure_status=$?
             if [ "$configure_status" -ne 0 ]; then
               echo "QEMU configure failed with exit code $configure_status"
-              exit "$configure_status"
+              false
+            else
+              ninja -j2 qemu-system-aarch64
+              build_status=$?
+              if [ "$build_status" -ne 0 ]; then
+                echo "QEMU build failed with exit code $build_status"
+                false
+              else
+                file qemu-system-aarch64
+                "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -d qemu-system-aarch64
+              fi
             fi
-            ninja -j2 qemu-system-aarch64
-            build_status=$?
-            if [ "$build_status" -ne 0 ]; then
-              echo "QEMU build failed with exit code $build_status"
-              exit "$build_status"
-            fi
-            file qemu-system-aarch64
-            "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -d qemu-system-aarch64
-            exit 0
           } > ../qemu-configure-build.log 2>&1
           result=$?
           echo "QEMU configure/build exit code: $result"
