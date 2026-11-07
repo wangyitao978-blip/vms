@@ -167,6 +167,24 @@ public final class MainActivity extends Activity {
         if (cfg.rootPath.isEmpty() && root.isFile()) {
             cfg.rootPath = root.getAbsolutePath();
         }
+        if (cfg.payloadPath.isEmpty() && !payload.isFile()) {
+            // New builds bundle a kernel-only SWEETXNU payload. Install it as
+            // the default payload so the user only needs to import their own
+            // iOS root image before starting a full guest.
+            try {
+                File bundled = BootConfig.demoPayload(this);
+                try (FileInputStream in = new FileInputStream(bundled);
+                     FileOutputStream out = new FileOutputStream(payload)) {
+                    byte[] buffer = new byte[1 << 20];
+                    int n;
+                    while ((n = in.read(buffer)) > 0) {
+                        out.write(buffer, 0, n);
+                    }
+                }
+            } catch (IOException ignored) {
+                // Older APKs or builds without the bundled kernel remain usable.
+            }
+        }
         if (cfg.payloadPath.isEmpty() && payload.isFile()) {
             cfg.payloadPath = payload.getAbsolutePath();
         }
