@@ -32,7 +32,7 @@ env:
 jobs:
   build:
     # XNU 8796 needs the Xcode 15 IIG ABI; Xcode 16 emits IORPC.kernelContent.
-    runs-on: macos-14-large
+    runs-on: macos-15
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +44,31 @@ jobs:
           git -C dxb checkout -q FETCH_HEAD
           # 12.5-14.3 use the top-level patches dir; ours go next to blacktop's
           cp xnu/patches/*.patch xnu/patches/*.sh dxb/patches/
+          # Xcode 16's IIG emits references to IORPC.kernelContent. XNU 8796's
+          # public IORPC struct predates that member; append the matching field
+          # used by newer XNU headers without changing existing member offsets.
+          python3 - <<'PY'
+          from pathlib import Path
+          candidates = [
+              Path("dxb/xnu/iokit/IOKit/IORPC.h"),
+              Path("dxb/xnu/iokit/DriverKit/IORPC.h"),
+          ]
+          for p in candidates:
+              if not p.is_file():
+                  continue
+              s = p.read_text()
+              if "struct IORPC {" not in s:
+                  continue
+              if "kernelContent" not in s:
+                  old = "uint32_t replySize;"
+                  if old not in s:
+                      raise SystemExit(f"Cannot patch IORPC layout in {p}")
+                  s = s.replace(old, old + "\\n#ifdef KERNEL\\nIORPCMessage * kernelContent;\\n#endif /* KERNEL */", 1)
+                  p.write_text(s)
+                  print(f"Added Xcode 16 IIG compatibility member to {p}")
+              else:
+                  print(f"IORPC compatibility member already present in {p}")
+          PY
           # libfirehose_kernel is built arm64e-only; the SWEET kernel is plain arm64
           sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
           grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
@@ -57,7 +82,7 @@ jobs:
           sudo chmod +x /usr/local/bin/xcodes
           sw_vers
           ls -d /Applications/Xcode*.app
-          XC=$(ls -d /Applications/Xcode_15.4.app)
+          XC=$(ls -d /Applications/Xcode_16.4.app)
           echo "DEVELOPER_DIR=$XC/Contents/Developer" >> "$GITHUB_ENV"
           sudo xcode-select -s "$XC"
           xcodebuild -version
