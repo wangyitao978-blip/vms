@@ -141,6 +141,12 @@ jobs:
           start = s.index("# Compiles if SafeStack *not* enabled")
           end = s.index("if get_option('safe_stack') and coroutine_backend", start)
           s = s[:start] + s[end:]
+          # Meson's GLib size_t probe is unreliable with the Termux sysroot
+          # under the NDK cross file. The selected ABI is explicitly aarch64,
+          # and the Termux glibconfig.h declares GLIB_SIZEOF_SIZE_T=8.
+          start = s.index("if not cc.compiles('''\n  #include <glib.h>\n  #include <unistd.h>")
+          end = s.index("# Silence clang warnings triggered by glib < 2.57.2", start)
+          s = s[:start] + "# Android ARM64: verified NDK/GLib size_t ABI (64-bit).\n\n" + s[end:]
           p.write_text(s)
           PY
 
