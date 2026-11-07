@@ -130,17 +130,14 @@ jobs:
           from pathlib import Path
           p = Path("qemu/meson.build")
           s = p.read_text()
-          old = "  elif compiler.get_id() == 'clang' and compiler.compiles('''"
-          new = "  elif compiler.get_id() == 'clang'"
-          if old not in s:
-              raise SystemExit("Could not locate QEMU Clang version probe")
-          s = s.replace(old, new, 1)
-          start = s.index("  elif compiler.get_id() == 'clang'\n")
-          end = s.index("    # ok", start)
-          s = s[:start] + "  elif compiler.get_id() == 'clang'\n" + s[end:]
+          # QEMU's Clang version check uses compiler.compiles(), which can
+          # fail under Meson's Android cross configuration despite NDK Clang 18.
+          # Replace the probe with a direct compiler-ID check.
+          start = s.index("  elif compiler.get_id() == 'clang' and compiler.compiles('''")
+          end = s.index("  else\n    error('You either need GCC", start)
+          s = s[:start] + "  elif compiler.get_id() == 'clang'\n    # ok\n" + s[end:]
           # Android does not use QEMU's optional SafeStack instrumentation.
           # Skip the compiler probe: NDK Clang rejects -fno-sanitize=safe-stack.
-          s = p.read_text()
           start = s.index("# Compiles if SafeStack *not* enabled")
           end = s.index("if get_option('safe_stack') and coroutine_backend", start)
           s = s[:start] + s[end:]
