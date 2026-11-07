@@ -89,24 +89,28 @@ jobs:
           mkdir -p "$WRAPPERS"
           cat > "$WRAPPERS/gcc" <<EOF
           #!/bin/sh
-          exec "$TOOLCHAIN/aarch64-linux-android24-clang" -fuse-ld=lld "$@"
+          exec "$TOOLCHAIN/aarch64-linux-android24-clang" -fuse-ld=lld "\$@"
           EOF
           cat > "$WRAPPERS/g++" <<EOF
           #!/bin/sh
-          exec "$TOOLCHAIN/aarch64-linux-android24-clang++" -fuse-ld=lld "$@"
+          exec "$TOOLCHAIN/aarch64-linux-android24-clang++" -fuse-ld=lld "\$@"
           EOF
-          for tool in ar ld nm strip ranlib objcopy; do
+          for tool in ar nm strip ranlib objcopy; do
             cat > "$WRAPPERS/$tool" <<EOF
           #!/bin/sh
-          exec "$TOOLCHAIN/llvm-$tool" "$@"
+          exec "$TOOLCHAIN/llvm-$tool" "\$@"
           EOF
           done
+          cat > "$WRAPPERS/ld" <<EOF
+          #!/bin/sh
+          exec "$TOOLCHAIN/ld.lld" "\$@"
+          EOF
           chmod +x "$WRAPPERS"/*
           cat > "$RUNNER_TEMP/termux-pkg-config" <<'EOF'
           #!/bin/sh
           export PKG_CONFIG_SYSROOT_DIR=/tmp/termux-root
           export PKG_CONFIG_LIBDIR=/tmp/termux-root/data/data/com.termux/files/usr/lib/pkgconfig:/tmp/termux-root/data/data/com.termux/files/usr/share/pkgconfig
-          exec pkg-config "$@"
+          exec pkg-config "\$@"
           EOF
           chmod +x "$RUNNER_TEMP/termux-pkg-config"
           echo "CROSS_WRAPPERS=$WRAPPERS" >> "$GITHUB_ENV"
