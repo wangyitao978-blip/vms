@@ -66,9 +66,8 @@ jobs:
               m = re.search(pattern, s, flags=re.S)
               if not m:
                   raise SystemExit("Could not patch IORPC struct in " + str(p))
-              s = s[:m.end()] + "\n#if KERNEL\n    IORPCMessage * kernelContent;\n#endif /* KERNEL */" + s[m.end():]
-              if count != 1:
-                  raise SystemExit("Could not patch IORPC struct in " + str(p))
+              addition = chr(10) + "#if KERNEL" + chr(10) + "    IORPCMessage * kernelContent;" + chr(10) + "#endif /* KERNEL */"
+              s = s[:m.end()] + addition + s[m.end():]
               p.write_text(s)
               print("Patched", p)
           else:
