@@ -120,10 +120,12 @@ jobs:
         run: |
           set -euo pipefail
           cp dxb/fakeroot/System/Library/Kernels/kernel.development.sweet kernel.development.sweet
-          # QEMU-only hardware adaptations: bypass the absent RPMh rail vote and
-          # switch the PSCI conduit from SMC to HVC. Keep the phone kernel pristine.
+          # QEMU-only hardware adaptation: bypass the absent RPMh rail vote.
+          # VmEngine pauses QEMU, sets psci-conduit=SMC through QMP, then
+          # resumes it. Keep the kernel PSCI instruction as SMC; replacing it
+          # with HVC would mismatch the configured conduit and trap at EL1.
           python3 tools/patch-qemu-input.py kernel.development.sweet kernel.development.sweet.qemu-input
-          python3 tools/patch-qemu-psci.py kernel.development.sweet.qemu-input kernel.development.sweet.qemu
+          cp kernel.development.sweet.qemu-input kernel.development.sweet.qemu
           python3 tools/mkadt.py qemu.adt --qemu --no-product --qemu-cpus 2
           python3 tools/mkpayload.py kernel.development.sweet.qemu qemu.adt sweet-qemu-payload.bin --profile vm
           file kernel.development.sweet kernel.development.sweet.qemu sweet-qemu-payload.bin
