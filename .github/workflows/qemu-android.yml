@@ -147,6 +147,14 @@ jobs:
           start = s.index("if not cc.compiles('''\n  #include <glib.h>\n  #include <unistd.h>")
           end = s.index("# Silence clang warnings triggered by glib < 2.57.2", start)
           s = s[:start] + "# Android ARM64: verified NDK/GLib size_t ABI (64-bit).\n\n" + s[end:]
+          # Android Bionic defines struct iovec in sys/uio.h. Meson's
+          # cross has_type probe misses it, which makes osdep.h redeclare it.
+          old = """config_host_data.set('CONFIG_IOVEC',
+                     cc.has_type('struct iovec',
+                                 prefix: '#include <sys/uio.h>'))"""
+          if old not in s:
+              raise SystemExit("Could not locate QEMU CONFIG_IOVEC probe")
+          s = s.replace(old, "config_host_data.set('CONFIG_IOVEC', true)", 1)
           p.write_text(s)
           PY
 
