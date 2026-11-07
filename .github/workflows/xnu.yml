@@ -120,10 +120,14 @@ jobs:
         run: |
           set -euo pipefail
           cp dxb/fakeroot/System/Library/Kernels/kernel.development.sweet kernel.development.sweet
+          # QEMU-only hardware adaptations: bypass the absent RPMh rail vote and
+          # switch the PSCI conduit from SMC to HVC. Keep the phone kernel pristine.
+          python3 tools/patch-qemu-input.py kernel.development.sweet kernel.development.sweet.qemu-input
+          python3 tools/patch-qemu-psci.py kernel.development.sweet.qemu-input kernel.development.sweet.qemu
           python3 tools/mkadt.py qemu.adt --qemu --no-product --qemu-cpus 2
-          python3 tools/mkpayload.py kernel.development.sweet qemu.adt sweet-qemu-payload.bin --profile vm
-          file kernel.development.sweet sweet-qemu-payload.bin
-          ls -lh kernel.development.sweet sweet-qemu-payload.bin
+          python3 tools/mkpayload.py kernel.development.sweet.qemu qemu.adt sweet-qemu-payload.bin --profile vm
+          file kernel.development.sweet kernel.development.sweet.qemu sweet-qemu-payload.bin
+          ls -lh kernel.development.sweet kernel.development.sweet.qemu sweet-qemu-payload.bin
 
       - uses: actions/upload-artifact@v4
         with:
@@ -131,6 +135,7 @@ jobs:
           path: |
             sweet-qemu-payload.bin
             kernel.development.sweet
+            kernel.development.sweet.qemu
           retention-days: 90
 
       - name: Upload concise XNU build log
