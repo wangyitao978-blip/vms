@@ -1041,22 +1041,63 @@ sweet_fb_open(void)
 		return -1;
 	}
 	sweet_fb_open_tried = 1;
-	void *mf = dlopen(
-	    "/System/Library/Frameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer", 2);
-	int (*open_fb)(unsigned int, unsigned int, unsigned long, unsigned int *) =
-	    (int (*)(unsigned int, unsigned int, unsigned long, unsigned int *))
-	    (mf != 0 ? dlsym(mf, "IOMobileFramebufferOpen") : 0);
+
+	/*
+	 * IOMobileFramebuffer is a private iOS framework. Prefer its real
+	 * PrivateFrameworks location; keep the public Frameworks location as
+	 * a compatibility fallback for images that expose it there.
+	 */
+	static const char *paths[] = {
+		"/System/Library/PrivateFrameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer",
+		"/System/Library/Frameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer",
+	};
+	void *mf = 0;
+	const char *loaded_path = 0;
+	int (*open_fb)(unsigned int, unsigned int, unsigned long, unsigned int *) = 0;
+	for (unsigned int i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+		dlerror();
+		mf = dlopen(paths[i], 2);
+		if (mf == 0) {
+			const char *error = dlerror();
+			dprintf(console_fd,
+			    "SWEETMETAL: present dlopen[%u] failed: %s%c",
+			    i, error != 0 ? error : "unknown", 10);
+			continue;
+		}
+		dlerror();
+		open_fb = (int (*)(unsigned int, unsigned int, unsigned long, unsigned int *))
+		    dlsym(mf, "IOMobileFramebufferOpen");
+		const char *error = dlerror();
+		if (open_fb != 0 && error == 0) {
+			loaded_path = paths[i];
+			break;
+		}
+		dprintf(console_fd,
+		    "SWEETMETAL: present dlsym[%u] failed: %s%c",
+		    i, error != 0 ? error : "symbol unavailable", 10);
+		dlclose(mf);
+		mf = 0;
+		open_fb = 0;
+	}
+	if (open_fb == 0) {
+		dprintf(console_fd, "SWEETMETAL: present IOMFB framework unavailable%c", 10);
+		return -1;
+	}
+	dprintf(console_fd, "SWEETMETAL: present framework loaded: %s%c",
+	    loaded_path, 10);
+
 	unsigned int service = IOServiceGetMatchingService(0,
 	    IOServiceMatching("IOMobileFramebuffer"));
+	if (service == 0) {
+		dprintf(console_fd, "SWEETMETAL: present IOMFB service not found%c", 10);
+		return -1;
+	}
 	unsigned int conn = 0;
-	int kr = -1;
-	if (service != 0 && open_fb != 0) {
-		kr = open_fb(service, mach_task_self(), 0, &conn);
-	}
-	if (service != 0) {
-		IOObjectRelease(service);
-	}
-	dprintf(console_fd, "SWEETMETAL: present open=0x%x conn=%u%c", kr, conn, 10);
+	int kr = open_fb(service, mach_task_self(), 0, &conn);
+	IOObjectRelease(service);
+	dprintf(console_fd,
+	    "SWEETMETAL: present open service=found kr=0x%x conn=%u%c",
+	    kr, conn, 10);
 	if (kr == 0 && conn != 0) {
 		sweet_fb_conn = conn;
 		return 0;
