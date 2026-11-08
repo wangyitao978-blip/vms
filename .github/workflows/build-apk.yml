@@ -49,7 +49,6 @@ jobs:
           find "$ENGINE_DIR" -maxdepth 1 -type f -printf '%f %s bytes\\n' | sort
 
       - name: Install Android SDK and NDK r27
-        working-directory: .
         uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
