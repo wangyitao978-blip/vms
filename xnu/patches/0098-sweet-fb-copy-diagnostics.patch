@@ -11,7 +11,7 @@
  	static unsigned rec_dumps;
  	if (rec_dumps < 2 && mask != 0) {
  		rec_dumps++;
- 		IOLog("SWEET FB: rec mask=0x%x\\n", mask);
+ 		IOLog("SWEET FB: rec mask=0x%x\n", mask);
 @@ -447,10 +448,11 @@
  		if (s == NULL || s == fSurface) {
  			OSSafeReleaseNULL(s);
@@ -51,7 +51,7 @@
 +		uint32_t diag = 0;
 +		if (sweet_fb_copy_diag_logged < 32) {
 +			diag = ++sweet_fb_copy_diag_logged;
-+			IOLog("SWEET FB COPY: #%u layer=%u id=%u map=0x%llx src=0x%llx panel=0x%llx phys=0x%llx bpe=%u size=%ux%u bpr=%u rect=%d,%d %dx%d srcxy=%d,%d len=0x%llx last=0x%llx center=%u srcpx=%08x panel0=%08x copy=%u offload=%u\\n",
++			IOLog("SWEET FB COPY: #%u layer=%u id=%u map=0x%llx src=0x%llx panel=0x%llx phys=0x%llx bpe=%u size=%ux%u bpr=%u rect=%d,%d %dx%d srcxy=%d,%d len=0x%llx last=0x%llx center=%u srcpx=%08x panel0=%08x copy=%u offload=%u\n",
 +			    diag, layer, id, (unsigned long long)mapped_src,
 +			    (unsigned long long)src, (unsigned long long)fPixels,
 +			    (unsigned long long)fPhys, bpe, s->width, s->height,
@@ -74,7 +74,7 @@
 +		    fWidth > 562 && fHeight > 1218) {
 +			panel_after = *(volatile uint32_t *)(fPixels +
 +			    (uint64_t)1218 * fRowBytes + (uint64_t)562 * 4);
-+			IOLog("SWEET FB COPY: #%u center-after src=%08x panel=%08x copied=%u offload=%u\\n",
++			IOLog("SWEET FB COPY: #%u center-after src=%08x panel=%08x copied=%u offload=%u\n",
 +			    diag, src_pixel, panel_after, do_copy, fOffload != NULL);
 +		}
  		s->release();
