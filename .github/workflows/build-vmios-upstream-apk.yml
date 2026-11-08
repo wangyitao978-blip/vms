@@ -73,19 +73,21 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x ./gradlew
-          ./gradlew --no-daemon clean assembleDebug -PvmiosAppId=dev.hackios.sweetvm
+          ./gradlew --no-daemon clean assembleDebug -PvmiosAppId=dev.vmios.sweetvm
 
-      - name: Verify QEMU engine, host GPU compositor and native rasterizer are packaged
+      - name: Verify application ID, QEMU engine, host GPU compositor and native rasterizer
         run: |
           set -euo pipefail
           APK=android/app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='dev.vmios.sweetvm'"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | tee apk-signature.txt
           unzip -Z1 "$APK" | grep -Fx 'lib/arm64-v8a/libsweetraster.so'
           unzip -Z1 "$APK" | grep -Fx 'classes2.dex'
           unzip -p "$APK" classes2.dex > /tmp/classes2.dex
           strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/CaCompositor'
           strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/GpuWireServer'
-          if unzip -Z1 "$APK" | grep -Ei '(^|/)(payload\.bin|kernel[^/]*|DeviceTree[^/]*|.*\.im4p|.*\.dmg|ios16-root\.img)$'; then
+          if unzip -Z1 "$APK" | grep -Ei '(^|/)(payload\\.bin|kernel[^/]*|DeviceTree[^/]*|.*\\.im4p|.*\\.dmg|ios16-root\\.img)$'; then
             echo "Unexpected XNU payload or Apple system image found in APK" >&2
             exit 1
           fi
@@ -98,5 +100,6 @@ jobs:
           path: |
             android/app/build/outputs/apk/debug/app-debug.apk
             app-debug.apk.sha256
+            apk-signature.txt
           if-no-files-found: error
           retention-days: 30
