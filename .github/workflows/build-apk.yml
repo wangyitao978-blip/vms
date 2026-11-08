@@ -5,35 +5,119 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: android
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Download the upstream-built QEMU engine and Termux libraries
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 42449507465 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name vmios-upstream-apk-no-xnu \
+            --dir /tmp/upstream-apk
+          APK=/tmp/upstream-apk/android/app/build/outputs/apk/debug/app-debug.apk
+          if [ ! -s "$APK" ]; then
+            APK=/tmp/upstream-apk/app-debug.apk
+          fi
+          test -s "$APK"
+          mkdir -p /tmp/engine-stage
+          unzip -oq "$APK" 'assets/engine/arm64-v8a/*' -d /tmp/engine-stage
+          ENGINE_DIR=android/app/src/main/assets/engine/arm64-v8a
+          test -s "/tmp/engine-stage/assets/engine/arm64-v8a/qemu-system-aarch64"
+          mkdir -p android/app/src/main/assets/engine
+          rm -rf "$ENGINE_DIR"
+          cp -a /tmp/engine-stage/assets/engine/arm64-v8a "$ENGINE_DIR"
+          test -s "$ENGINE_DIR/qemu-system-aarch64"
+          test -s "$ENGINE_DIR/libglib-2.0.so.0"
+          chmod 755 "$ENGINE_DIR/qemu-system-aarch64"
+          echo "Staged ARM64 engine files:"
+          find "$ENGINE_DIR" -maxdepth 1 -type f -printf '%f %s bytes\\n' | sort
+
+      - name: Install Android SDK and NDK r27
+        working-directory: .
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android platform and NDK
+        working-directory: .
+        run: |
+          set -euo pipefail
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.0.12077973"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
+
+      - name: Compile the native CA rasterizer for arm64-v8a
+        working-directory: .
+        run: |
+          set -euo pipefail
+          TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          DEST=android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p "$DEST"
+          "$TOOLCHAIN/aarch64-linux-android26-clang" \
+            -O3 -fPIC -shared -pthread \
+            android/app/src/main/cpp/sweetraster.c \
+            -o "$DEST/libsweetraster.so" -lm
+          file "$DEST/libsweetraster.so"
+          "$TOOLCHAIN/llvm-readelf" -h "$DEST/libsweetraster.so" | grep -E 'Class:|Machine:'
+          test -s "$DEST/libsweetraster.so"
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
+
       - name: Make Gradle executable
         run: chmod +x gradlew
-      - name: Verify QEMU engine assets
-        shell: bash
+
+      - name: Verify QEMU engine assets before APK build
         run: |
           set -euo pipefail
-          for abi in arm64-v8a x86_64; do
-            test -x "app/src/main/assets/engine/$abi/qemu-system-aarch64" || { echo "Missing engine/$abi/qemu-system-aarch64"; exit 1; }
-            test -f "app/src/main/assets/engine/$abi/libglib-2.0.so.0" || { echo "Missing engine/$abi/libglib-2.0.so.0"; exit 1; }
-          done
+          ENGINE=app/src/main/assets/engine/arm64-v8a
+          test -s "$ENGINE/qemu-system-aarch64"
+          test -s "$ENGINE/libglib-2.0.so.0"
+          test -s app/src/main/jniLibs/arm64-v8a/libsweetraster.so
+          echo "QEMU engine asset count: $(find "$ENGINE" -maxdepth 1 -type f | wc -l)"
+
       - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon
-      - name: Upload APK
+        run: ./gradlew --no-daemon clean assembleDebug
+
+      - name: Verify APK contents
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/qemu-system-aarch64'
+          unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/libglib-2.0.so.0'
+          unzip -Z1 "$APK" | grep -Fx 'lib/arm64-v8a/libsweetraster.so'
+          unzip -Z1 "$APK" | grep -Fx 'classes2.dex'
+          unzip -p "$APK" classes2.dex > /tmp/classes2.dex
+          strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/EngineAssets'
+          strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/CaCompositor'
+          sha256sum "$APK" | tee app-debug.apk.sha256
+
+      - name: Upload verified APK
         uses: actions/upload-artifact@v4
         with:
-          name: vmios-debug-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: vmios-debug-apk-with-engine
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
