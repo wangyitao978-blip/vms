@@ -35,7 +35,6 @@ env:
 jobs:
   build:
     # macos-14 was retired; macos-15 is the supported ARM64 image with Xcode 16.x.
-    # Patch 0099 backports IORPC.kernelContent for xnu-8796's Xcode 16 iig ABI.
     runs-on: macos-15
     timeout-minutes: 120
     steps:
