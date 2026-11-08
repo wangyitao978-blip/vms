@@ -1,0 +1,102 @@
+name: Build upstream Android APK with native CA rasterizer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-vmios-upstream-apk.yml"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the upstream-built QEMU engine and Termux libraries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 42449507465 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name vmios-upstream-apk-no-xnu \
+            --dir /tmp/upstream-apk
+          APK=/tmp/upstream-apk/android/app/build/outputs/apk/debug/app-debug.apk
+          if [ ! -s "$APK" ]; then
+            APK=/tmp/upstream-apk/app-debug.apk
+          fi
+          test -s "$APK"
+          mkdir -p /tmp/engine-stage
+          unzip -oq "$APK" 'assets/engine/arm64-v8a/*' -d /tmp/engine-stage
+          test -s /tmp/engine-stage/assets/engine/arm64-v8a/qemu-system-aarch64
+          mkdir -p android/app/src/main/assets/engine
+          cp -a /tmp/engine-stage/assets/engine/arm64-v8a \
+            android/app/src/main/assets/engine/
+
+      - name: Install Android SDK and NDK r27
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android platform and NDK
+        run: |
+          set -euo pipefail
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.0.12077973"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
+
+      - name: Compile the upstream native CA rasterizer for arm64-v8a
+        run: |
+          set -euo pipefail
+          TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          DEST=android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p "$DEST"
+          "$TOOLCHAIN/aarch64-linux-android26-clang" \
+            -O3 -fPIC -shared -pthread \
+            android/app/src/main/cpp/sweetraster.c \
+            -o "$DEST/libsweetraster.so" -lm
+          file "$DEST/libsweetraster.so"
+          "$TOOLCHAIN/llvm-readelf" -h "$DEST/libsweetraster.so" | grep -E 'Class:|Machine:'
+          test -s "$DEST/libsweetraster.so"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Build the upstream Android app without embedding XNU or the iOS image
+        working-directory: android
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew --no-daemon clean assembleDebug -PvmiosAppId=dev.hackios.sweetvm
+
+      - name: Verify QEMU engine, host GPU compositor and native rasterizer are packaged
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -Z1 "$APK" | grep -Fx 'lib/arm64-v8a/libsweetraster.so'
+          unzip -Z1 "$APK" | grep -Fx 'classes2.dex'
+          unzip -p "$APK" classes2.dex > /tmp/classes2.dex
+          strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/CaCompositor'
+          strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/GpuWireServer'
+          if unzip -Z1 "$APK" | grep -Ei '(^|/)(payload\.bin|kernel[^/]*|DeviceTree[^/]*|.*\.im4p|.*\.dmg|ios16-root\.img)$'; then
+            echo "Unexpected XNU payload or Apple system image found in APK" >&2
+            exit 1
+          fi
+          sha256sum "$APK" | tee app-debug.apk.sha256
+
+      - name: Upload the rebuilt upstream Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: vmios-upstream-apk-native-ca
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            app-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
