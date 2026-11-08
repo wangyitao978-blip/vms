@@ -74,36 +74,102 @@ jobs:
             -o research/ipsw-x/d22ap.adt
           test -s research/ipsw-x/d22ap.adt
 
-      - name: Build the full QEMU GPU ADT and payload
+      - name: Build host-raster variant (Android CA compositor)
         run: |
           set -euo pipefail
-          python3 tools/mkadt.py qemu-gpu.adt \
+          mkdir -p dist/host-raster
+          LD="$(brew --prefix lld)/bin/ld64.lld" \
+            CLANG="$(xcrun --find clang)" \
+            bash tools/build-sweetmetal.sh
+          cp vm/metal/build/SweetMetalAccel.sgb dist/host-raster/
+          python3 tools/gpu-bundle.py list dist/host-raster/SweetMetalAccel.sgb
+
+          python3 tools/mkadt.py dist/host-raster/qemu-gpu.adt \
             --qemu --qemu-cpus 2 \
             --gpu-wire \
             --canvas-width 1125 --canvas-height 2436 \
-            --gpu-bundle vm/metal/build/SweetMetalAccel.sgb
+            --gpu-bundle dist/host-raster/SweetMetalAccel.sgb
 
           CMDLINE="$(python3 tools/bootargs.py vm --add gpu_wire=1 sweetmetal=1)"
-          printf 'cmdline: %s\n' "$CMDLINE"
+          printf 'host-raster cmdline: %s\\n' "$CMDLINE"
           python3 tools/mkpayload.py \
             /tmp/upstream/kernel.development.sweet.qemu \
-            qemu-gpu.adt sweet-qemu-gpu-payload.bin \
+            dist/host-raster/qemu-gpu.adt \
+            dist/host-raster/sweet-qemu-gpu-payload.bin \
             --cmdline "$CMDLINE"
+          cp /tmp/upstream/kernel.development.sweet.qemu dist/host-raster/
+          cat > dist/host-raster/TEST-MODE.txt <<'EOF'
+          MODE: android-host-raster
+          sweet_stage_local = 0
+          Full-screen CA draw batches are submitted over GPU Wire to the Android
+          CaCompositor. The Android JNI sweetraster library performs CPU rasterization.
+          Presentation/staging and IOMobileFramebuffer swap remain unchanged.
+          Use the same Android APK as the guest-local variant.
+          EOF
+          (cd dist/host-raster && shasum -a 256 \
+            sweet-qemu-gpu-payload.bin qemu-gpu.adt SweetMetalAccel.sgb \
+            kernel.development.sweet.qemu > SHA256SUMS)
 
-          file qemu-gpu.adt sweet-qemu-gpu-payload.bin
-          shasum -a 256 \
+      - name: Build guest-local variant (TCG software rasterizer)
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("vm/metal/SweetMetal.m")
+          source = path.read_text()
+          old = "static int sweet_stage_local = 0;"
+          new = "static int sweet_stage_local = 1;"
+          if source.count(old) != 1:
+              raise SystemExit("Expected exactly one default sweet_stage_local=0 switch")
+          path.write_text(source.replace(old, new))
+          PY
+
+          mkdir -p dist/guest-local-raster
+          LD="$(brew --prefix lld)/bin/ld64.lld" \
+            CLANG="$(xcrun --find clang)" \
+            bash tools/build-sweetmetal.sh
+          cp vm/metal/build/SweetMetalAccel.sgb dist/guest-local-raster/
+          python3 tools/gpu-bundle.py list dist/guest-local-raster/SweetMetalAccel.sgb
+
+          python3 tools/mkadt.py dist/guest-local-raster/qemu-gpu.adt \
+            --qemu --qemu-cpus 2 \
+            --gpu-wire \
+            --canvas-width 1125 --canvas-height 2436 \
+            --gpu-bundle dist/guest-local-raster/SweetMetalAccel.sgb
+
+          CMDLINE="$(python3 tools/bootargs.py vm --add gpu_wire=1 sweetmetal=1)"
+          printf 'guest-local-raster cmdline: %s\\n' "$CMDLINE"
+          python3 tools/mkpayload.py \
             /tmp/upstream/kernel.development.sweet.qemu \
-            vm/metal/build/SweetMetalAccel.sgb \
-            qemu-gpu.adt sweet-qemu-gpu-payload.bin
+            dist/guest-local-raster/qemu-gpu.adt \
+            dist/guest-local-raster/sweet-qemu-gpu-payload.bin \
+            --cmdline "$CMDLINE"
+          cp /tmp/upstream/kernel.development.sweet.qemu dist/guest-local-raster/
+          cat > dist/guest-local-raster/TEST-MODE.txt <<'EOF'
+          MODE: guest-local-raster
+          sweet_stage_local = 1
+          Full-screen CA draw batches are not sent to Android; SweetMetal uses
+          its Guest-side software rasterizer under QEMU/TCG.
+          Staging copy and IOMobileFramebuffer swap remain unchanged.
+          This mode may be substantially slower; it is a diagnostic comparison.
+          Use the same Android APK as the host-raster variant.
+          EOF
+          (cd dist/guest-local-raster && shasum -a 256 \
+            sweet-qemu-gpu-payload.bin qemu-gpu.adt SweetMetalAccel.sgb \
+            kernel.development.sweet.qemu > SHA256SUMS)
 
-      - name: Upload the corrected standalone payload and its inputs
+      - name: Upload host-raster test files
         uses: actions/upload-artifact@v4
         with:
-          name: vmios-full-gpu-payload
-          path: |
-            sweet-qemu-gpu-payload.bin
-            qemu-gpu.adt
-            vm/metal/build/SweetMetalAccel.sgb
-            /tmp/upstream/kernel.development.sweet.qemu
+          name: vmios-host-raster-payload
+          path: dist/host-raster/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload guest-local-raster test files
+        uses: actions/upload-artifact@v4
+        with:
+          name: vmios-guest-local-raster-payload
+          path: dist/guest-local-raster/
           if-no-files-found: error
           retention-days: 30
