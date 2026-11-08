@@ -1,24 +1,35 @@
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
-@@ -395,5 +395,6 @@
+@@ -392,10 +392,11 @@
+ 
  void
  AppleCLCD::present(const uint8_t *rec)
  {
-+	static uint32_t sweet_fb_copy_diag_logged;
  	static unsigned long long present_count;
++	static uint32_t sweet_fb_copy_diag_logged;
  	uint32_t mask = get32(rec, 0x104);
-@@ -440,5 +441,6 @@
+ 	static unsigned rec_dumps;
+ 	if (rec_dumps < 2 && mask != 0) {
+ 		rec_dumps++;
+ 		IOLog("SWEET FB: rec mask=0x%x\\n", mask);
+@@ -447,10 +448,11 @@
+ 		if (s == NULL || s == fSurface) {
+ 			OSSafeReleaseNULL(s);
+ 			continue;
+ 		}
  		uintptr_t src = s->kernelAddress();
- 		uint32_t bpe = s->bytesPerElement ? s->bytesPerElement : 4;
 +		uintptr_t mapped_src = src;
+ 		uint32_t bpe = s->bytesPerElement ? s->bytesPerElement : 4;
  		if (w <= 0 || h <= 0) {
  			w = (int32_t)s->width;
  			h = (int32_t)s->height;
-@@ -477,12 +479,48 @@
+@@ -488,10 +490,40 @@
+ 		uint64_t last = (uint64_t)s->offset + (uint64_t)(sy + h - 1) * s->bytesPerRow +
+ 		    (uint64_t)(sx + w) * 4;
  		if (w <= 0 || h <= 0 || s->elementWidth != 1 || s->elementHeight != 1 ||
  		    s->memory == NULL || last > s->memory->getLength()) {
  			src = 0;
- 		}
++		}
 +		uint64_t memlen = s->memory != NULL ? s->memory->getLength() : 0;
 +		uint32_t src_pixel = 0, panel_before = 0, panel_after = 0;
 +		bool center_covered = w > 0 && h > 0 &&
@@ -40,28 +51,33 @@
 +		uint32_t diag = 0;
 +		if (sweet_fb_copy_diag_logged < 32) {
 +			diag = ++sweet_fb_copy_diag_logged;
-+			IOLog("SWEET FB COPY: #%u layer=%u id=%u map=0x%llx src=0x%llx panel=0x%llx phys=0x%llx bpe=%u size=%ux%u bpr=%u rect=%d,%d %dx%d srcxy=%d,%d len=0x%llx last=0x%llx center=%u srcpx=%08x panel0=%08x copy=%u\n",
++			IOLog("SWEET FB COPY: #%u layer=%u id=%u map=0x%llx src=0x%llx panel=0x%llx phys=0x%llx bpe=%u size=%ux%u bpr=%u rect=%d,%d %dx%d srcxy=%d,%d len=0x%llx last=0x%llx center=%u srcpx=%08x panel0=%08x copy=%u offload=%u\\n",
 +			    diag, layer, id, (unsigned long long)mapped_src,
 +			    (unsigned long long)src, (unsigned long long)fPixels,
 +			    (unsigned long long)fPhys, bpe, s->width, s->height,
 +			    s->bytesPerRow, dx, dy, w, h, sx, sy,
 +			    (unsigned long long)memlen, (unsigned long long)last,
-+			    center_covered, src_pixel, panel_before, do_copy);
-+		}
--		if (src != 0 && bpe == 4) {
-+		if (do_copy) {
- 			for (int32_t y = 0; y < h; y++) {
- 				memcpy((void *)(fPixels + (uint64_t)(dy + y) * fRowBytes + (uint64_t)dx * 4),
++			    center_covered, src_pixel, panel_before, do_copy,
++			    fOffload != NULL);
+ 		}
+ 		if (src != 0 && bpe == 4) {
+ 			if (fOffload != NULL) {
+ 				bool ok = true;
+ 				for (int32_t y = 0; y < h; y++) {
+@@ -516,10 +548,17 @@
  				    (const void *)(src + s->offset + (uint64_t)(sy + y) * s->bytesPerRow + (uint64_t)sx * 4),
  				    (size_t)w * 4);
+ 				}
  			}
  		}
 +		if (diag != 0 && center_covered && fPixels != 0 &&
 +		    fWidth > 562 && fHeight > 1218) {
 +			panel_after = *(volatile uint32_t *)(fPixels +
 +			    (uint64_t)1218 * fRowBytes + (uint64_t)562 * 4);
-+			IOLog("SWEET FB COPY: #%u center-after src=%08x panel=%08x copied=%u\n",
-+			    diag, src_pixel, panel_after, do_copy);
++			IOLog("SWEET FB COPY: #%u center-after src=%08x panel=%08x copied=%u offload=%u\\n",
++			    diag, src_pixel, panel_after, do_copy, fOffload != NULL);
 +		}
  		s->release();
-*** End Patch
+ 	}
+ 	/* swap_set_blit records: count at 0x38b, 6 entries of 0x24 bytes at 0x38f. */
+ 	uint32_t blits = get32(rec, 0x38b);
