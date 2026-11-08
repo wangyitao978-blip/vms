@@ -56,7 +56,7 @@ index 5d1d922..1406bef 100644
 @@ -3212,1 +3212,1 @@
 -	IORPC rpc = { .message = msgin, .reply = msgout, .sendSize = msgin->msgh.msgh_size, .replySize = replyAlloc };
 +	IORPC rpc = { .message = msgin, .reply = msgout, .sendSize = msgin->msgh.msgh_size, .replySize = replyAlloc, .kernelContent = message };
-@@ -3360,3 +3360,4 @@
+@@ -3358,5 +3358,6 @@
  	rpc.sendSize  = mach->msgh.msgh_size;
  	rpc.reply     = (IORPCMessageMach *) (p + inSize);
  	rpc.replySize = ((uint32_t) (sizeof(buffer.buffer) - inSize));    // inSize was checked
