@@ -32,16 +32,16 @@ jobs:
       - name: Install upstream plugin linker and IPSW utility
         run: |
           set -euo pipefail
-          brew install llvm
+          brew install llvm lld
           brew install blacktop/tap/ipsw
-          test -x "$(brew --prefix llvm)/bin/ld64.lld"
+          test -x "$(brew --prefix lld)/bin/ld64.lld"
           ipsw version
           xcodebuild -version
 
       - name: Build the original SweetMetalAccel plugin bundle
         run: |
           set -euo pipefail
-          LD="$(brew --prefix llvm)/bin/ld64.lld" \
+          LD="$(brew --prefix lld)/bin/ld64.lld" \
             CLANG="$(xcrun --find clang)" \
             tools/build-sweetmetal.sh
           test -s vm/metal/build/SweetMetalAccel.sgb
