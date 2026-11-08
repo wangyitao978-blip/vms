@@ -1,6 +1,12 @@
 name: Build upstream-faithful Android GPU payload
 
 on:
+  workflow_dispatch:
+    inputs:
+      xnu_run_id:
+        description: Successful XNU workflow run ID (artifact name xnu-kernel)
+        required: false
+        default: "42502970659"
   push:
     branches: [main]
     paths:
@@ -24,17 +30,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download the successful original XNU/QEMU build artifact
+      - name: Download the successful XNU kernel and adapt PSCI for QEMU
         env:
           GH_TOKEN: ${{ github.token }}
+          XNU_RUN_ID: ${{ inputs.xnu_run_id || '42502970659' }}
         run: |
           set -euo pipefail
-          gh run download 42450246192 \
+          gh run download "$XNU_RUN_ID" \
             --repo "$GITHUB_REPOSITORY" \
-            --name vmios-original-xnu-and-qemu-payload \
+            --name xnu-kernel \
             --dir /tmp/upstream
+          test -s /tmp/upstream/kernel.development.sweet
+          python3 tools/patch-qemu-psci.py \
+            /tmp/upstream/kernel.development.sweet \
+            /tmp/upstream/kernel.development.sweet.qemu
           test -s /tmp/upstream/kernel.development.sweet.qemu
-          shasum -a 256 /tmp/upstream/kernel.development.sweet.qemu
+          shasum -a 256 /tmp/upstream/kernel.development.sweet /tmp/upstream/kernel.development.sweet.qemu
 
       - name: Install upstream plugin linker and IPSW utility
         run: |
