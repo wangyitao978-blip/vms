@@ -1,6 +1,4 @@
-# Rebuild trigger: verify the complete checked-in XNU patch series.
 name: xnu
-# Trigger a fresh kernel build after importing the complete upstream source tree.
 
 on:
   workflow_dispatch:
@@ -23,6 +21,10 @@ on:
       - "xnu/patches/**"
       - ".github/workflows/xnu.yml"
 
+concurrency:
+  group: xnu-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   DXB_REPO: https://github.com/blacktop/darwin-xnu-build
   DXB_SHA: 663906528d1cd5ea8fde7de6f16de73db9511549
@@ -32,8 +34,9 @@ env:
 
 jobs:
   build:
-    # XNU 8796 needs the Xcode 15 IIG ABI; Xcode 16 emits IORPC.kernelContent.
-    runs-on: macos-15
+    # macos-14 still ships Xcode 15.x: its iig matches the xnu-8796 IORPC ABI
+    # (Xcode 16's iig emits IORPC.kernelContent, which this xnu lacks)
+    runs-on: macos-14
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -45,40 +48,6 @@ jobs:
           git -C dxb checkout -q FETCH_HEAD
           # 12.5-14.3 use the top-level patches dir; ours go next to blacktop's
           cp xnu/patches/*.patch xnu/patches/*.sh dxb/patches/
-          # Xcode 16's IIG emits references to IORPC.kernelContent. XNU 8796's
-          # public IORPC struct predates that member; append the matching field
-          # used by newer XNU headers without changing existing member offsets.
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path("dxb/build.sh")
-          s = p.read_text()
-          marker = '    running "🩹 Patching xnu files"\n'
-          if marker not in s:
-              raise SystemExit("Could not find XNU patch stage in build.sh")
-          injected = marker + """    # Xcode 16 IIG generates IORPC.kernelContent initializers. Add the
-          # field to the XNU 8796 kernel header after get_xnu() has fetched it.
-              python3 - <<'IORPC_PATCH'
-          from pathlib import Path
-          import re
-          p = Path("xnu/iokit/IOKit/IORPC.h")
-          s = p.read_text()
-          if not re.search(r"\bkernelContent\s*;", s):
-              start = s.find("struct IORPC {")
-              end = s.find("replySize;", start) if start >= 0 else -1
-              if start < 0 or end < 0:
-                  raise SystemExit("Could not locate IORPC fields in " + str(p))
-              end += len("replySize;")
-              addition = chr(10) + "#if KERNEL" + chr(10) + "    IORPCMessage * kernelContent;" + chr(10) + "#endif /* KERNEL */"
-              s = s[:end] + addition + s[end:]
-              p.write_text(s)
-              print("Patched", p)
-          else:
-              print("IORPC.kernelContent already present")
-          IORPC_PATCH
-          """
-          s = s.replace(marker, injected, 1)
-          p.write_text(s)
-          PY
           # libfirehose_kernel is built arm64e-only; the SWEET kernel is plain arm64
           sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
           grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
@@ -92,7 +61,7 @@ jobs:
           sudo chmod +x /usr/local/bin/xcodes
           sw_vers
           ls -d /Applications/Xcode*.app
-          XC=$(ls -d /Applications/Xcode_16.4.app)
+          XC=$(ls -d /Applications/Xcode_*.app | sort -V | head -1)
           echo "DEVELOPER_DIR=$XC/Contents/Developer" >> "$GITHUB_ENV"
           sudo xcode-select -s "$XC"
           xcodebuild -version
@@ -103,50 +72,7 @@ jobs:
         env:
           # keep going after errors so one run reports every compile failure
           MAKEFLAGS: ${{ inputs.keep_going == 'false' && '' || '-k' }}
-        run: |
-          set +e
-          bash build.sh > ../xnu-build.log 2>&1
-          result=$?
-          echo "XNU build exit code: $result"
-          echo "---- compiler diagnostics ----"
-          grep -nE '(^|: )(error:|fatal error:)|Error [0-9]+|BUILD FAILED|undefined symbol|No such file|not found' ../xnu-build.log | tail -n 120 || true
-          echo "---- end of diagnostics ----"
-          if [ "$result" -ne 0 ] && ! grep -qE 'error:|fatal error:|BUILD FAILED' ../xnu-build.log; then
-            tail -n 100 ../xnu-build.log
-          fi
-          exit "$result"
-
-      - name: Build QEMU boot payload
-        run: |
-          set -euo pipefail
-          cp dxb/fakeroot/System/Library/Kernels/kernel.development.sweet kernel.development.sweet
-          # QEMU-only hardware adaptation: bypass the absent RPMh rail vote.
-          # VmEngine pauses QEMU, sets psci-conduit=SMC through QMP, then
-          # resumes it. Keep the kernel PSCI instruction as SMC; replacing it
-          # with HVC would mismatch the configured conduit and trap at EL1.
-          python3 tools/patch-qemu-input.py kernel.development.sweet kernel.development.sweet.qemu-input
-          cp kernel.development.sweet.qemu-input kernel.development.sweet.qemu
-          python3 tools/mkadt.py qemu.adt --qemu --no-product --qemu-cpus 2
-          python3 tools/mkpayload.py kernel.development.sweet.qemu qemu.adt sweet-qemu-payload.bin --profile vm
-          file kernel.development.sweet kernel.development.sweet.qemu sweet-qemu-payload.bin
-          ls -lh kernel.development.sweet kernel.development.sweet.qemu sweet-qemu-payload.bin
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sweet-qemu-payload
-          path: |
-            sweet-qemu-payload.bin
-            kernel.development.sweet
-            kernel.development.sweet.qemu
-          retention-days: 90
-
-      - name: Upload concise XNU build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: xnu-build-log
-          path: xnu-build.log
-          retention-days: 7
+        run: bash build.sh
 
       - name: Package build tree for local compiles
         if: always()
@@ -175,7 +101,6 @@ jobs:
         run: |
           mkdir -p out/kdk-libs
           for lib in /Library/Developer/KDKs/*/System/Library/KernelSupport/lib*.a; do
-            [ -f "$lib" ] || continue
             b=$(basename "$lib" .a)
             ar t "$lib" > "out/kdk-libs/$b.members.txt" 2>&1 || true
             nm -m "$lib" > "out/kdk-libs/$b.nm.txt" 2>&1 || true
