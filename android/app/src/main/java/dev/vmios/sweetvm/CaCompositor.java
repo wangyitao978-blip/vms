@@ -690,6 +690,23 @@ final class CaCompositor {
                 float bl = xr10((raw >> 20) & 0x3ff);
                 return pack(r, g, bl, 1f);
             }
+            /*
+             * The 554/555 wire formats are the alpha-bearing packed 10-bit
+             * variants used by the IOSurface compositor.  They share the
+             * little-endian R10:G10:B10 layout of 550/551, with the top two
+             * bits carrying A2.  Falling through to the BGRA8 default turns
+             * full-screen XR surfaces into the red/black bands seen on the
+             * device.
+             */
+            case 554:
+            case 555: {
+                int raw = b.getInt(i);
+                float r = xr10(raw & 0x3ff);
+                float g = xr10((raw >> 10) & 0x3ff);
+                float bl = xr10((raw >> 20) & 0x3ff);
+                float a = ((raw >>> 30) & 0x3) / 3f;
+                return pack(r, g, bl, a);
+            }
             case 552:
             case 553: {
                 float r = xr16(b.getShort(i) & 0xffff);
