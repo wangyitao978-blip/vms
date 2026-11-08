@@ -43,7 +43,7 @@ jobs:
           set -euo pipefail
           LD="$(brew --prefix lld)/bin/ld64.lld" \
             CLANG="$(xcrun --find clang)" \
-            tools/build-sweetmetal.sh
+            bash tools/build-sweetmetal.sh
           test -s vm/metal/build/SweetMetalAccel.sgb
           python3 tools/gpu-bundle.py list vm/metal/build/SweetMetalAccel.sgb
 
