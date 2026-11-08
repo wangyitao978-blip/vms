@@ -20,16 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Go for ipsw
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
-
       - name: Install build dependencies and ipsw
         run: |
           brew install jq gum bash cmake ninja
-          go install github.com/blacktop/ipsw/cmd/ipsw@latest
-          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+          brew install blacktop/tap/ipsw
           printf '#!/bin/sh\nexit 0\n' | sudo tee /usr/local/bin/xcodes >/dev/null
           sudo chmod +x /usr/local/bin/xcodes
           sw_vers
