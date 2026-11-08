@@ -1,0 +1,202 @@
+name: Rebuild upstream Android APK without embedded XNU
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-original-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ninja-build pkg-config python3 python3-venv \
+            git wget curl gzip dpkg-dev libglib2.0-dev libpixman-1-dev device-tree-compiler \
+            libfdt-dev libslirp-dev unzip
+
+      - name: Set up Android SDK and NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install NDK r27 and Android SDK
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.0.12077973"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
+
+      - name: Fetch Termux aarch64 sysroot packages
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/termux-debs /tmp/termux-root
+          python3 - <<'PY'
+          import gzip, urllib.request, email, re, os, subprocess
+          base = "https://packages.termux.dev/apt/termux-main/"
+          index_url = base + "dists/stable/main/binary-aarch64/Packages.gz"
+          data = gzip.decompress(urllib.request.urlopen(index_url, timeout=60).read()).decode()
+          packages = {}
+          for block in data.split("\n\n"):
+              if not block.strip():
+                  continue
+              msg = email.message_from_string(block)
+              name = msg.get("Package")
+              if name:
+                  packages[name] = msg
+          roots = ["glib", "libpixman", "pcre2", "libffi", "libiconv", "libandroid-support", "zlib"]
+          todo, selected = list(roots), set()
+          while todo:
+              name = todo.pop()
+              if name in selected:
+                  continue
+              if name not in packages:
+                  raise SystemExit("Missing Termux package: " + name)
+              msg = packages[name]
+              selected.add(name)
+              for dep in msg.get("Depends", "").split(","):
+                  dep = dep.strip().split("|")[0].strip()
+                  dep = re.sub(r"\s*\([^)]*\)", "", dep).strip()
+                  dep = re.sub(r":any$", "", dep)
+                  if dep and dep in packages and dep not in selected:
+                      todo.append(dep)
+          print("Termux packages:", ", ".join(sorted(selected)))
+          for name in sorted(selected):
+              filename = packages[name].get("Filename")
+              if not filename:
+                  raise SystemExit("No Filename for " + name)
+              out = "/tmp/termux-debs/" + os.path.basename(filename)
+              urllib.request.urlretrieve(base + filename, out)
+              subprocess.run(["dpkg-deb", "-x", out, "/tmp/termux-root"], check=True)
+          PY
+          test -d /tmp/termux-root/data/data/com.termux/files/usr/lib
+
+      - name: Create Android cross toolchain wrappers
+        run: |
+          set -euo pipefail
+          TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          WRAPPERS="$RUNNER_TEMP/android-cross"
+          mkdir -p "$WRAPPERS"
+          cat > "$WRAPPERS/gcc" <<EOF
+          #!/bin/sh
+          exec "$TOOLCHAIN/aarch64-linux-android24-clang" "\$@"
+          EOF
+          cat > "$WRAPPERS/g++" <<EOF
+          #!/bin/sh
+          exec "$TOOLCHAIN/aarch64-linux-android24-clang++" "\$@"
+          EOF
+          for tool in ar nm strip ranlib objcopy; do
+            cat > "$WRAPPERS/$tool" <<EOF
+          #!/bin/sh
+          exec "$TOOLCHAIN/llvm-$tool" "\$@"
+          EOF
+          done
+          cat > "$WRAPPERS/ld" <<EOF
+          #!/bin/sh
+          exec "$TOOLCHAIN/ld.lld" "\$@"
+          EOF
+          chmod +x "$WRAPPERS"/*
+          cat > "$RUNNER_TEMP/termux-pkg-config" <<'EOF'
+          #!/bin/sh
+          export PKG_CONFIG_SYSROOT_DIR=/tmp/termux-root
+          export PKG_CONFIG_LIBDIR=/tmp/termux-root/data/data/com.termux/files/usr/lib/pkgconfig:/tmp/termux-root/data/data/com.termux/files/usr/share/pkgconfig
+          exec pkg-config "$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/termux-pkg-config"
+          echo "CROSS_WRAPPERS=$WRAPPERS" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG=$RUNNER_TEMP/termux-pkg-config" >> "$GITHUB_ENV"
+
+      - name: Fetch QEMU 8.2.0 and apply upstream vmios device sources
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v8.2.0 https://github.com/qemu/qemu.git qemu
+          cp vm/qemu/sweet_ufs.c vm/qemu/sweet_touch.c vm/qemu/sweet_fb.c qemu/hw/block/
+          git -C qemu apply "$GITHUB_WORKSPACE/vm/qemu/qemu-sweet.patch"
+
+      - name: Configure and build QEMU exactly as documented
+        working-directory: qemu
+        env:
+          SYSROOT: /tmp/termux-root
+        run: |
+          set -euo pipefail
+          mkdir build-android
+          cd build-android
+          PKG_CONFIG="$PKG_CONFIG" ../configure \
+            --cross-prefix="$CROSS_WRAPPERS/" \
+            --cpu=aarch64 \
+            --target-list=aarch64-softmmu \
+            --host-cc=gcc \
+            --disable-werror \
+            --disable-docs --disable-guest-agent --disable-tools \
+            --disable-gtk --disable-sdl --disable-vnc --disable-opengl \
+            --disable-spice --disable-glusterfs --disable-libssh --disable-capstone \
+            --disable-slirp --disable-kvm --disable-curl --disable-libiscsi \
+            --disable-libnfs --disable-smartcard --disable-usb-redir --disable-u2f \
+            --disable-seccomp --disable-xen --disable-brlapi --disable-curses \
+            --disable-vte --disable-pipewire --disable-jack --disable-oss \
+            --disable-alsa --disable-vhost-user --disable-vhost-crypto \
+            --disable-vhost-vdpa --disable-vhost-net --disable-vhost-kernel \
+            --disable-libvduse --disable-virtfs --enable-pie
+          ninja qemu-system-aarch64
+          file qemu-system-aarch64
+
+      - name: Stage original QEMU binary and Termux libraries
+        run: |
+          set -euo pipefail
+          DEST=android/app/src/main/assets/engine/arm64-v8a
+          mkdir -p "$DEST"
+          cp qemu/build-android/qemu-system-aarch64 "$DEST/"
+          LIBDIR=/tmp/termux-root/data/data/com.termux/files/usr/lib
+          find "$LIBDIR" -maxdepth 1 \( -type f -o -type l \) | while read -r f; do
+            case "$f" in
+              *.so|*.so.*) cp -L "$f" "$DEST/$(basename "$f")" ;;
+            esac
+          done
+          chmod 755 "$DEST/qemu-system-aarch64"
+          test -s "$DEST/qemu-system-aarch64"
+          rm -f android/app/src/main/assets/demo/payload.bin
+          find "$DEST" -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Build upstream Android app
+        working-directory: android
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew --no-daemon clean assembleDebug
+
+      - name: Verify APK has no embedded XNU payload or Apple system image
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -Z1 "$APK" | grep '^assets/' || true
+          if unzip -Z1 "$APK" | grep -Ei '(^|/)(payload\.bin|kernel[^/]*|DeviceTree[^/]*|.*\.im4p|.*\.dmg)$'; then
+            echo "Unexpected kernel/payload/system image found in APK" >&2
+            exit 1
+          fi
+          sha256sum "$APK" | tee app-debug.apk.sha256
+
+      - name: Upload APK without XNU payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: vmios-upstream-apk-no-xnu
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            app-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
