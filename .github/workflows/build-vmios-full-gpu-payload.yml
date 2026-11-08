@@ -5,6 +5,13 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/build-vmios-full-gpu-payload.yml"
+      - "vm/metal/SweetMetal.m"
+      - "vm/metal/Info.plist"
+      - "tools/build-sweetmetal.sh"
+      - "tools/gpu-bundle.py"
+      - "tools/mkadt.py"
+      - "tools/mkpayload.py"
+      - "tools/bootargs.py"
 
 permissions:
   actions: read
