@@ -62,6 +62,7 @@ int dprintf(int fd, const char *format, ...);
 int snprintf(char *str, unsigned long size, const char *format, ...);
 int strncmp(const char *a, const char *b, unsigned long n);
 void *dlopen(const char *path, int mode);
+int dlclose(void *handle);
 void *dlsym(void *handle, const char *name);
 char *dlerror(void);
 int usleep(unsigned int usec);
