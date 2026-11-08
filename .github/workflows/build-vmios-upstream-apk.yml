@@ -87,7 +87,7 @@ jobs:
           unzip -p "$APK" classes2.dex > /tmp/classes2.dex
           strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/CaCompositor'
           strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/GpuWireServer'
-          if unzip -Z1 "$APK" | grep -Ei '(^|/)(payload\\.bin|kernel[^/]*|DeviceTree[^/]*|.*\\.im4p|.*\\.dmg|ios16-root\\.img)$'; then
+          if unzip -Z1 "$APK" | grep -Ei '(^|/)(payload\.bin|kernel[^/]*|DeviceTree[^/]*|.*\.im4p|.*\.dmg|ios16-root\.img)$'; then
             echo "Unexpected XNU payload or Apple system image found in APK" >&2
             exit 1
           fi
