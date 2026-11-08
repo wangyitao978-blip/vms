@@ -1,0 +1,154 @@
+name: Rebuild original XNU and QEMU payload on supported macOS runner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/xnu-rebuild-macos15.yml'
+
+env:
+  DXB_REPO: https://github.com/blacktop/darwin-xnu-build
+  DXB_SHA: 663906528d1cd5ea8fde7de6f16de73db9511549
+  MACOS_VERSION: '13.5'
+  KERNEL_CONFIG: DEVELOPMENT
+  MACHINE_CONFIG: SWEET
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go for ipsw
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Install build dependencies and ipsw
+        run: |
+          brew install jq gum bash cmake ninja
+          go install github.com/blacktop/ipsw/cmd/ipsw@latest
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+          printf '#!/bin/sh\nexit 0\n' | sudo tee /usr/local/bin/xcodes >/dev/null
+          sudo chmod +x /usr/local/bin/xcodes
+          sw_vers
+          ls -d /Applications/Xcode_16.4.app
+          echo "DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer" >> "$GITHUB_ENV"
+          sudo xcode-select -s /Applications/Xcode_16.4.app
+          xcodebuild -version
+          xcrun --find iig
+          ipsw version
+
+      - name: Fetch upstream XNU build script and exact original patches
+        run: |
+          set -euo pipefail
+          git init -q dxb
+          git -C dxb fetch -q --depth 1 "$DXB_REPO" "$DXB_SHA"
+          git -C dxb checkout -q FETCH_HEAD
+          cp xnu/patches/*.patch xnu/patches/*.sh dxb/patches/
+          # libfirehose_kernel is arm64e-only upstream; SWEET is plain arm64.
+          sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
+          grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
+          ls dxb/patches
+
+      - name: Add Xcode 16 IIG compatibility to the build workspace only
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("dxb/build.sh")
+          s = p.read_text()
+          marker = '    running "🩹 Patching xnu files"\n'
+          if marker not in s:
+              raise SystemExit("Could not find XNU patch stage in build.sh")
+          injected = marker + """    # Xcode 16 IIG emits IORPC.kernelContent initializers. Add the
+              # corresponding field to the XNU 8796 kernel header in this
+              # temporary build workspace; the repository patch series is unchanged.
+              python3 - <<'IORPC_PATCH'
+          from pathlib import Path
+          import re
+          p = Path("xnu/iokit/IOKit/IORPC.h")
+          s = p.read_text()
+          if not re.search(r"\\bkernelContent\\s*;", s):
+              start = s.find("struct IORPC {")
+              end = s.find("replySize;", start) if start >= 0 else -1
+              if start < 0 or end < 0:
+                  raise SystemExit("Could not locate IORPC fields in " + str(p))
+              end += len("replySize;")
+              addition = chr(10) + "#if KERNEL" + chr(10) + "    IORPCMessage * kernelContent;" + chr(10) + "#endif /* KERNEL */"
+              s = s[:end] + addition + s[end:]
+              p.write_text(s)
+              print("Patched", p)
+          else:
+              print("IORPC.kernelContent already present")
+          IORPC_PATCH
+          """
+          s = s.replace(marker, injected, 1)
+          p.write_text(s)
+          PY
+
+      - name: Build original XNU patch series
+        working-directory: dxb
+        env:
+          MAKEFLAGS: '-k'
+        run: |
+          set -euo pipefail
+          bash build.sh
+
+      - name: Extract the real D22AP product node from iOS 16.7.16 IPSW
+        run: |
+          set -euo pipefail
+          mkdir -p research/ipsw-x/dt
+          python3 - <<'PY' > /tmp/ipsw-url
+          import json, urllib.request
+          data = json.load(urllib.request.urlopen(
+              "https://api.ipsw.me/v4/device/iPhone10,3?type=ipsw", timeout=60))
+          matches = [x for x in data["firmwares"] if x.get("buildid") == "20H392"]
+          if not matches:
+              raise SystemExit("iPhone10,3 build 20H392 was not found")
+          print(matches[0]["url"])
+          PY
+          python3 tools/remotezip.py "$(cat /tmp/ipsw-url)" DeviceTree.d22ap.im4p research/ipsw-x/dt
+          ipsw img4 im4p extract \
+            research/ipsw-x/dt/Firmware/all_flash/DeviceTree.d22ap.im4p \
+            -o research/ipsw-x/d22ap.adt
+          test -s research/ipsw-x/d22ap.adt
+
+      - name: Build QEMU-specific kernel copy, ADT and standalone payload
+        run: |
+          set -euo pipefail
+          cp dxb/fakeroot/System/Library/Kernels/kernel.development.sweet kernel.development.sweet
+          python3 tools/patch-qemu-input.py kernel.development.sweet kernel.development.sweet.qemu-input
+          cp kernel.development.sweet.qemu-input kernel.development.sweet.qemu
+          python3 tools/mkadt.py qemu.adt --qemu --qemu-cpus 2
+          python3 tools/mkpayload.py kernel.development.sweet.qemu qemu.adt sweet-qemu-payload.bin --profile vm
+          file kernel.development.sweet kernel.development.sweet.qemu qemu.adt sweet-qemu-payload.bin
+          ls -lh kernel.development.sweet kernel.development.sweet.qemu qemu.adt sweet-qemu-payload.bin
+          shasum -a 256 kernel.development.sweet kernel.development.sweet.qemu qemu.adt sweet-qemu-payload.bin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vmios-original-xnu-and-qemu-payload
+          path: |
+            kernel.development.sweet
+            kernel.development.sweet.qemu
+            qemu.adt
+            sweet-qemu-payload.bin
+          retention-days: 30
+
+      - name: Collect kernel build diagnostics
+        if: always()
+        run: |
+          mkdir -p out
+          cp -R dxb/fakeroot/System/Library/Kernels/. out/ 2>/dev/null || true
+          (cd out && shasum -a 256 kernel.* > SHA256SUMS) || true
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xnu-kernel-original-toolchain-adapted
+          path: out/
+          if-no-files-found: warn
+          retention-days: 30
