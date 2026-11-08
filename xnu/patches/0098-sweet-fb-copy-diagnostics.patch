@@ -1,5 +1,5 @@
---- a/iokit/Kernel/arm/SweetFramebuffer.cpp
-+++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
 @@ -394,6 +394,7 @@
  AppleCLCD::present(const uint8_t *rec)
  {
@@ -16,10 +16,11 @@
  		uint32_t bpe = s->bytesPerElement ? s->bytesPerElement : 4;
  		if (w <= 0 || h <= 0) {
  			w = (int32_t)s->width;
-@@ -491,6 +493,36 @@
+@@ -490,6 +492,36 @@
+ 		if (w <= 0 || h <= 0 || s->elementWidth != 1 || s->elementHeight != 1 ||
  		    s->memory == NULL || last > s->memory->getLength()) {
  			src = 0;
- 		}
++		}
 +		uint64_t memlen = s->memory != NULL ? s->memory->getLength() : 0;
 +		uint32_t src_pixel = 0, panel_before = 0, panel_after = 0;
 +		bool center_covered = w > 0 && h > 0 &&
@@ -49,10 +50,9 @@
 +			    (unsigned long long)memlen, (unsigned long long)last,
 +			    center_covered, src_pixel, panel_before, do_copy,
 +			    fOffload != NULL);
-+		}
+ 		}
  		if (src != 0 && bpe == 4) {
  			if (fOffload != NULL) {
- 				bool ok = true;
 @@ -518,6 +550,13 @@
  				}
  			}
@@ -66,4 +66,4 @@
 +		}
  		s->release();
  	}
- 	/* swap_set_blit records: count at 0x38b, 6 entries of 0x24 bytes at 0x38f. */
+ 	/* swap_set_blit records
