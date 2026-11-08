@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download the successful XNU kernel and adapt PSCI for QEMU
+      - name: Download the successful XNU kernel with its SMC PSCI conduit
         env:
           GH_TOKEN: ${{ github.token }}
           XNU_RUN_ID: ${{ inputs.xnu_run_id || '42502970659' }}
@@ -41,11 +41,11 @@ jobs:
             --name xnu-kernel \
             --dir /tmp/upstream
           test -s /tmp/upstream/kernel.development.sweet
-          python3 tools/patch-qemu-psci.py \
-            /tmp/upstream/kernel.development.sweet \
-            /tmp/upstream/kernel.development.sweet.qemu
-          test -s /tmp/upstream/kernel.development.sweet.qemu
-          shasum -a 256 /tmp/upstream/kernel.development.sweet /tmp/upstream/kernel.development.sweet.qemu
+          # Keep the kernel's SMC #0 instruction: VmEngine configures QEMU's
+          # PSCI conduit to SMC over QMP before continuing the paused VM.
+          # Do not run patch-qemu-psci.py here: it changes SMC to HVC and
+          # conflicts with the Android engine's EL1 + SMC configuration.
+          shasum -a 256 /tmp/upstream/kernel.development.sweet
 
       - name: Install upstream plugin linker and IPSW utility
         run: |
@@ -104,11 +104,11 @@ jobs:
           CMDLINE="$(python3 tools/bootargs.py vm --add gpu_wire=1 sweetmetal=1)"
           printf 'host-raster cmdline: %s\\n' "$CMDLINE"
           python3 tools/mkpayload.py \
-            /tmp/upstream/kernel.development.sweet.qemu \
+            /tmp/upstream/kernel.development.sweet \
             dist/host-raster/qemu-gpu.adt \
             dist/host-raster/sweet-qemu-gpu-payload.bin \
             --cmdline "$CMDLINE"
-          cp /tmp/upstream/kernel.development.sweet.qemu dist/host-raster/
+          cp /tmp/upstream/kernel.development.sweet dist/host-raster/
           cat > dist/host-raster/TEST-MODE.txt <<'EOF'
           MODE: android-host-raster
           sweet_stage_local = 0
@@ -119,7 +119,7 @@ jobs:
           EOF
           (cd dist/host-raster && shasum -a 256 \
             sweet-qemu-gpu-payload.bin qemu-gpu.adt SweetMetalAccel.sgb \
-            kernel.development.sweet.qemu > SHA256SUMS)
+            kernel.development.sweet > SHA256SUMS)
 
       - name: Build guest-local variant (TCG software rasterizer)
         run: |
@@ -151,11 +151,11 @@ jobs:
           CMDLINE="$(python3 tools/bootargs.py vm --add gpu_wire=1 sweetmetal=1)"
           printf 'guest-local-raster cmdline: %s\\n' "$CMDLINE"
           python3 tools/mkpayload.py \
-            /tmp/upstream/kernel.development.sweet.qemu \
+            /tmp/upstream/kernel.development.sweet \
             dist/guest-local-raster/qemu-gpu.adt \
             dist/guest-local-raster/sweet-qemu-gpu-payload.bin \
             --cmdline "$CMDLINE"
-          cp /tmp/upstream/kernel.development.sweet.qemu dist/guest-local-raster/
+          cp /tmp/upstream/kernel.development.sweet dist/guest-local-raster/
           cat > dist/guest-local-raster/TEST-MODE.txt <<'EOF'
           MODE: guest-local-raster
           sweet_stage_local = 1
@@ -167,7 +167,7 @@ jobs:
           EOF
           (cd dist/guest-local-raster && shasum -a 256 \
             sweet-qemu-gpu-payload.bin qemu-gpu.adt SweetMetalAccel.sgb \
-            kernel.development.sweet.qemu > SHA256SUMS)
+            kernel.development.sweet > SHA256SUMS)
 
       - name: Upload host-raster test files
         uses: actions/upload-artifact@v4
