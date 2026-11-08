@@ -1,20 +1,20 @@
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
-@@ -395,6 +395,7 @@
+@@ -395,5 +395,6 @@
  void
  AppleCLCD::present(const uint8_t *rec)
  {
 +	static uint32_t sweet_fb_copy_diag_logged;
  	static unsigned long long present_count;
  	uint32_t mask = get32(rec, 0x104);
-@@ -440,6 +441,7 @@
+@@ -440,5 +441,6 @@
  		uintptr_t src = s->kernelAddress();
  		uint32_t bpe = s->bytesPerElement ? s->bytesPerElement : 4;
 +		uintptr_t mapped_src = src;
  		if (w <= 0 || h <= 0) {
  			w = (int32_t)s->width;
  			h = (int32_t)s->height;
-@@ -477,8 +479,53 @@
+@@ -477,12 +479,48 @@
  		if (w <= 0 || h <= 0 || s->elementWidth != 1 || s->elementHeight != 1 ||
  		    s->memory == NULL || last > s->memory->getLength()) {
  			src = 0;
