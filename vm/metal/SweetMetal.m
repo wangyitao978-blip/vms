@@ -3461,6 +3461,8 @@ sweet_texture_surface(id texture)
 	unsigned int pending_surface[8];
 	unsigned int pending_color[8];
 	int pending_count;
+	id pending_drawables[8];
+	int pending_drawable_count;
 	id completed_handlers[8];
 	int completed_count;
 }
@@ -3479,6 +3481,7 @@ sweet_texture_surface(id texture)
 - (id)blitCommandEncoder;
 - (id)computeCommandEncoder;
 - (void)flushFills;
+- (int)sweet_presentDrawables;
 @end
 
 /* arm64 block ABI: the invoke pointer is the fourth word. Calling it
@@ -3555,8 +3558,11 @@ struct SweetBlockHeader {
 	int host_complete = sweet_ca_flush();
 	[self flushFills];
 	if (host_complete) {
-		sweet_present_pending();
+		if ([self sweet_presentDrawables] == 0) {
+			sweet_present_pending();
+		}
 	} else {
+		(void)[self sweet_presentDrawables];
 		sweet_last_surface = 0;
 	}
 }
@@ -3567,8 +3573,11 @@ struct SweetBlockHeader {
 	int host_complete = sweet_ca_flush();
 	[self flushFills];
 	if (host_complete) {
-		sweet_present_pending();
+		if ([self sweet_presentDrawables] == 0) {
+			sweet_present_pending();
+		}
 	} else {
+		(void)[self sweet_presentDrawables];
 		sweet_last_surface = 0;
 	}
 }
@@ -3581,6 +3590,40 @@ struct SweetBlockHeader {
 - (void)presentDrawable:(id)drawable
 {
 	sweet_log("buffer", "presentDrawable");
+	if (drawable == 0) {
+		return;
+	}
+	if (pending_drawable_count >= 8) {
+		dprintf(console_fd, "SWEETMETAL: too many pending drawables%c", 10);
+		return;
+	}
+	pending_drawables[pending_drawable_count++] =
+	    ((id (*)(id, SEL))objc_msgSend)(drawable, sel_registerName("retain"));
+}
+
+- (int)sweet_presentDrawables
+{
+	int presented = 0;
+	for (int i = 0; i < pending_drawable_count; i++) {
+		id drawable = pending_drawables[i];
+		pending_drawables[i] = 0;
+		if (drawable != 0) {
+			SEL present = sel_registerName("present");
+			if (((BOOL (*)(id, SEL, SEL))objc_msgSend)(drawable,
+			    sel_registerName("respondsToSelector:"), present)) {
+				((void (*)(id, SEL))objc_msgSend)(drawable, present);
+				presented++;
+			} else {
+				dprintf(console_fd,
+				    "SWEETMETAL: drawable %s has no present selector%c",
+				    object_getClassName(drawable), 10);
+			}
+			((void (*)(id, SEL))objc_msgSend)(drawable,
+			    sel_registerName("release"));
+		}
+	}
+	pending_drawable_count = 0;
+	return presented;
 }
 
 - (void)waitUntilCompleted
