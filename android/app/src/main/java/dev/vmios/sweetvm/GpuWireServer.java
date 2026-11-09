@@ -52,6 +52,11 @@ public final class GpuWireServer {
 
     public static synchronized void start(int port, File ramFile) {
         guestRam = ramFile;
+        if (ramFile != null) {
+            // The listener survives VM stop/start cycles. Drop the previous
+            // guest's IOSurface/page-table caches before accepting new draws.
+            compositor = null;
+        }
         if (instance != null) {
             return;
         }
