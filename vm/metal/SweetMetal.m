@@ -3284,7 +3284,9 @@ sweet_texture_surface(id texture)
 					texture->tex_host_id = sweet_ca_upload_ids++;
 				}
 				tex_id = texture->tex_host_id;
-				tex_flags = SWEET_CA_F_TEXTURED | SWEET_CA_F_UPLOAD_TEX;
+				/* The upload and draw packets must agree this heap target is RGBA8. */
+				tex_flags = SWEET_CA_F_TEXTURED | SWEET_CA_F_UPLOAD_TEX |
+				    SWEET_CA_F_INTERNAL;
 				if (!sweet_ca_upload(tex_id, (unsigned int)r.tex_fmt_px,
 				    r.tex_w, r.tex_h, r.tex_bpr, r.tex,
 				    r.tex_bpr * r.tex_h, tex_flags)) {
