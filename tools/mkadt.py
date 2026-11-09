@@ -105,6 +105,12 @@ def build(seed=None, qemu=False, highmem=False, no_product=False, qemu_cpus=1,
         ('dram-base', u64(phys_base)),
         ('dram-size', u64(mem_size)),
         ('random-seed', seed),
+        # MobileGestalt needs both radio MAC addresses to derive UniqueDeviceID.
+        # Without them, LaunchServices can block during early boot waiting for
+        # MGCopyAnswer(UniqueDeviceID), leaving the guest on the Apple logo.
+        # Match the stable locally administered addresses used by ios-qemu.
+        ('mac-address-wifi0', bytes.fromhex('525400123456')),
+        ('mac-address-bluetooth0', bytes.fromhex('525400123457')),
         ('debug-enabled', u32(1)),
         ('embedded-panic-log-size', u32(PANIC_LOG_SIZE)),
         ('firmware-version', cstr('sweet-shim')),
