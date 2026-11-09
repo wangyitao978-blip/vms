@@ -709,6 +709,8 @@ static unsigned int sweet_ca_map_next;
 static unsigned int sweet_ca_upload_ids = 0x80000000u;
 static unsigned int sweet_ca_sequence;
 static unsigned int sweet_ca_pending;
+/* A failed encoder flush must remain failed until its command buffer commits. */
+static unsigned int sweet_ca_frame_failed;
 static unsigned int sweet_ca_submitted;
 static unsigned int sweet_ca_local;
 static unsigned int sweet_ca_flushes;
@@ -3421,6 +3423,9 @@ sweet_texture_surface(id texture)
 	 * acknowledged every draw that targets it. A timed-out flush may still
 	 * have work in flight, so reading the stage would race the host. */
 	int host_complete = sweet_ca_flush();
+	if (!host_complete) {
+		sweet_ca_frame_failed = 1;
+	}
 	if (host_complete && enc_stage && sweet_stage_id != 0 && enc_map.base != 0 &&
 	    enc_map.width == sweet_stage_w && enc_map.height == sweet_stage_h) {
 		/*
@@ -3463,8 +3468,11 @@ sweet_texture_surface(id texture)
 	int pending_count;
 	id pending_drawables[8];
 	int pending_drawable_count;
+	id scheduled_handlers[8];
+	int scheduled_count;
 	id completed_handlers[8];
 	int completed_count;
+	unsigned long command_status;
 }
 - (void)commit;
 - (void)commitAndWaitUntilSubmitted;
@@ -3477,6 +3485,7 @@ sweet_texture_surface(id texture)
 - (unsigned long)status;
 - (id)error;
 - (void)sweet_invokeHandlers;
+- (void)sweet_invokeScheduledHandlers;
 - (id)renderCommandEncoderWithDescriptor:(id)descriptor;
 - (id)blitCommandEncoder;
 - (id)computeCommandEncoder;
@@ -3511,21 +3520,68 @@ struct SweetBlockHeader {
 	completed_count = 0;
 }
 
+- (void)sweet_invokeScheduledHandlers
+{
+	for (int i = 0; i < scheduled_count; i++) {
+		id block = scheduled_handlers[i];
+		scheduled_handlers[i] = 0;
+		if (block != 0) {
+			struct SweetBlockHeader *header = (struct SweetBlockHeader *)block;
+			if (header->invoke != 0) {
+				((void (*)(void *, id))header->invoke)(block, self);
+			}
+			((void (*)(id, SEL))objc_msgSend)(block,
+			    sel_registerName("release"));
+		}
+	}
+	scheduled_count = 0;
+}
+
 - (void)addCompletedHandler:(id)handler
 {
 	sweet_log("buffer", "addCompletedHandler");
-	(void)handler;
+	if (handler == 0) {
+		return;
+	}
+	if (command_status == 4 || command_status == 5) {
+		struct SweetBlockHeader *header = (struct SweetBlockHeader *)handler;
+		if (header->invoke != 0) {
+			((void (*)(void *, id))header->invoke)(handler, self);
+		}
+		return;
+	}
+	if (completed_count >= 8) {
+		dprintf(console_fd, "SWEETMETAL: completed handler limit reached%c", 10);
+		return;
+	}
+	completed_handlers[completed_count++] =
+	    ((id (*)(id, SEL))objc_msgSend)(handler, sel_registerName("retain"));
 }
 
 - (void)addScheduledHandler:(id)handler
 {
 	sweet_log("buffer", "addScheduledHandler");
-	(void)handler;
+	if (handler == 0) {
+		return;
+	}
+	if (command_status >= 3) {
+		struct SweetBlockHeader *header = (struct SweetBlockHeader *)handler;
+		if (header->invoke != 0) {
+			((void (*)(void *, id))header->invoke)(handler, self);
+		}
+		return;
+	}
+	if (scheduled_count >= 8) {
+		dprintf(console_fd, "SWEETMETAL: scheduled handler limit reached%c", 10);
+		return;
+	}
+	scheduled_handlers[scheduled_count++] =
+	    ((id (*)(id, SEL))objc_msgSend)(handler, sel_registerName("retain"));
 }
 
 - (unsigned long)status
 {
-	return 4; /* MTLCommandBufferStatusCompleted */
+	return command_status;
 }
 
 - (id)error
@@ -3555,36 +3611,40 @@ struct SweetBlockHeader {
 - (void)commit
 {
 	sweet_log("buffer", "commit");
-	int host_complete = sweet_ca_flush();
+	if (command_status >= 2) {
+		return;
+	}
+	command_status = 2; /* MTLCommandBufferStatusCommitted */
+	command_status = 3; /* synchronous host queue has accepted the batch */
+	[self sweet_invokeScheduledHandlers];
+	int host_complete = sweet_ca_flush() && !sweet_ca_frame_failed;
+	sweet_ca_frame_failed = 0;
 	[self flushFills];
 	if (host_complete) {
 		if ([self sweet_presentDrawables:1] == 0) {
 			sweet_present_pending();
 		}
+		command_status = 4; /* MTLCommandBufferStatusCompleted */
 	} else {
 		(void)[self sweet_presentDrawables:0];
 		sweet_last_surface = 0;
+		command_status = 5; /* MTLCommandBufferStatusError */
 	}
+	[self sweet_invokeHandlers];
 }
 
 - (void)commitAndWaitUntilSubmitted
 {
 	sweet_log("buffer", "commitAndWaitUntilSubmitted");
-	int host_complete = sweet_ca_flush();
-	[self flushFills];
-	if (host_complete) {
-		if ([self sweet_presentDrawables:1] == 0) {
-			sweet_present_pending();
-		}
-	} else {
-		(void)[self sweet_presentDrawables:0];
-		sweet_last_surface = 0;
-	}
+	[self commit];
 }
 
 - (void)enqueue
 {
 	sweet_log("buffer", "enqueue");
+	if (command_status == 0) {
+		command_status = 1; /* MTLCommandBufferStatusEnqueued */
+	}
 }
 
 - (void)presentDrawable:(id)drawable
