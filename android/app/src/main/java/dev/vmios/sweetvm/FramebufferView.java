@@ -4,6 +4,8 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.AttributeSet;
@@ -19,6 +21,18 @@ public final class FramebufferView extends View {
     private Bitmap back;
     private boolean hasFrame;
     private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    {
+        // The guest framebuffer's byte order is RGBA while Android ARGB_8888
+        // consumes BGRA bytes on little-endian devices. Swap only R/B at the
+        // presentation stage; leave guest RAM and guest texture decoding intact.
+        ColorMatrix rbSwap = new ColorMatrix(new float[] {
+                0, 0, 1, 0, 0,
+                0, 1, 0, 0, 0,
+                1, 0, 0, 0, 0,
+                0, 0, 0, 1, 0
+        });
+        paint.setColorFilter(new ColorMatrixColorFilter(rbSwap));
+    }
     private final RectF dst = new RectF();
 
     public interface TouchListener {
