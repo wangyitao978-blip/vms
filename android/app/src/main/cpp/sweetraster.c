@@ -214,11 +214,15 @@ raster_band(const RasterCtx *c, int y0, int y1, long *out_covered)
                 break;
             }
             uint64_t pa = (uint64_t)pages[page];
-            if (pa < RAM_BASE ||
-                pa - RAM_BASE + within + 4 > g_ram_len) {
+            if (pa < RAM_BASE) {
                 break;
             }
-            uint8_t *base = g_ram + (pa - RAM_BASE) + within;
+            uint64_t ram_off = pa - RAM_BASE;
+            if (ram_off > g_ram_len || within > g_ram_len - ram_off ||
+                (uint64_t)span * 4u > g_ram_len - ram_off - within) {
+                break;
+            }
+            uint8_t *base = g_ram + ram_off + within;
             if (c->opaque_solid) {
                 for (int i = 0; i < span; i++, x++) {
                     int in;
@@ -443,9 +447,10 @@ Java_dev_vmios_sweetvm_CaCompositor_nativeTriangle(JNIEnv *env, jclass cls,
         c.sr = sr; c.sg = sg; c.sb = sb; c.sa = sa;
         c.opaque_solid = solid && sa >= 0.999f;
         if (c.opaque_solid) {
-            int ri = (int)(sr * 255.0f + 0.5f);
-            int gi = (int)(sg * 255.0f + 0.5f);
-            int bi = (int)(sb * 255.0f + 0.5f);
+            /* Match Java's integer truncation in the fallback rasterizer. */
+            int ri = (int)(sr * 255.0f);
+            int gi = (int)(sg * 255.0f);
+            int bi = (int)(sb * 255.0f);
             c.opaque_px = 0xff000000u | ((uint32_t)ri << 16) |
                 ((uint32_t)gi << 8) | (uint32_t)bi;
         }
