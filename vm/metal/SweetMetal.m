@@ -922,14 +922,17 @@ sweet_ca_send(const void *payload, unsigned long bytes)
 	return 0;
 }
 
-static void
+static int
 sweet_ca_flush(void)
 {
-	if (sweet_ca_pending == 0 || sweet_accel_port == 0 ||
-	    sweet_ca_disabled) {
+	if (sweet_ca_pending == 0) {
+		bzero(sweet_ca_maps, sizeof(sweet_ca_maps));
+		return 1;
+	}
+	if (sweet_accel_port == 0 || sweet_ca_disabled) {
 		bzero(sweet_ca_maps, sizeof(sweet_ca_maps));
 		sweet_ca_pending = 0;
-		return;
+		return 0;
 	}
 	unsigned int sequence = sweet_ca_sequence;
 	unsigned long output_size = 0;
@@ -977,6 +980,7 @@ sweet_ca_flush(void)
 	}
 	sweet_ca_pending = 0;
 	bzero(sweet_ca_maps, sizeof(sweet_ca_maps));
+	return result == 0;
 }
 
 static int
@@ -3413,9 +3417,11 @@ sweet_texture_surface(id texture)
 - (void)endEncoding
 {
 	sweet_log("encoder", "endEncoding");
-	/* The drawable must be complete before the swap record is sent. */
-	sweet_ca_flush();
-	if (enc_stage && sweet_stage_id != 0 && enc_map.base != 0 &&
+	/* Do not copy or present a staging frame unless the host has
+	 * acknowledged every draw that targets it. A timed-out flush may still
+	 * have work in flight, so reading the stage would race the host. */
+	int host_complete = sweet_ca_flush();
+	if (host_complete && enc_stage && sweet_stage_id != 0 && enc_map.base != 0 &&
 	    enc_map.width == sweet_stage_w && enc_map.height == sweet_stage_h) {
 		/*
 		 * The window server presents this drawable itself; our own
@@ -3439,8 +3445,8 @@ sweet_texture_surface(id texture)
 			    sweet_ticks_ms(mach_absolute_time() - copy_t0), 10);
 		}
 	}
-	if (enc_surface != 0 && enc_map.base != 0 && enc_map.width >= 1000 &&
-	    enc_map.height >= 2000) {
+	if (host_complete && enc_surface != 0 && enc_map.base != 0 &&
+	    enc_map.width >= 1000 && enc_map.height >= 2000) {
 		sweet_last_surface = enc_surface;
 		sweet_last_width = enc_map.width;
 		sweet_last_height = enc_map.height;
@@ -3547,16 +3553,25 @@ struct SweetBlockHeader {
 {
 	sweet_log("buffer", "commit");
 	sweet_ca_flush();
+	int host_complete = sweet_ca_flush();
 	[self flushFills];
-	sweet_present_pending();
+	if (host_complete) {
+		sweet_present_pending();
+	} else {
+		sweet_last_surface = 0;
+	}
 }
 
 - (void)commitAndWaitUntilSubmitted
 {
 	sweet_log("buffer", "commitAndWaitUntilSubmitted");
-	sweet_ca_flush();
+	int host_complete = sweet_ca_flush();
 	[self flushFills];
-	sweet_present_pending();
+	if (host_complete) {
+		sweet_present_pending();
+	} else {
+		sweet_last_surface = 0;
+	}
 }
 
 - (void)enqueue
