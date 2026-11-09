@@ -710,7 +710,8 @@ final class CaCompositor {
                 float bl = xr16(b.getShort(i) & 0xffff);
                 float g = xr16(b.getShort(i + 2) & 0xffff);
                 float r = xr16(b.getShort(i + 4) & 0xffff);
-                float a = xr16(b.getShort(i + 6) & 0xffff);
+                /* XR expands RGB only; alpha remains linear UNORM. */
+                float a = (b.getShort(i + 6) & 0xffff) / 65535f;
                 return pack(r, g, bl, a);
             }
             case 105: {
