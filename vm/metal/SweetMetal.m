@@ -3349,6 +3349,34 @@ sweet_texture_surface(id texture)
 					n = count;
 				}
 				const unsigned char *ip = (const unsigned char *)ic + index_offset;
+				unsigned int expanded[4096 * 3];
+				if (type == 4) {
+					/* Metal triangle strips alternate winding to keep a consistent
+					 * front face. Expand once so host and local rasterizers agree. */
+					if (n < 3) n = 0;
+					unsigned long triangles = n > 2 ? n - 2 : 0;
+					for (unsigned long i = 2; i < n; i++) {
+						unsigned long j = (i - 2) * 3;
+						unsigned long a = index_type == 0 ?
+						    ((const unsigned short *)ip)[i - 2] :
+						    ((const unsigned int *)ip)[i - 2];
+						unsigned long b = index_type == 0 ?
+						    ((const unsigned short *)ip)[i - 1] :
+						    ((const unsigned int *)ip)[i - 1];
+						unsigned long c = index_type == 0 ?
+						    ((const unsigned short *)ip)[i] :
+						    ((const unsigned int *)ip)[i];
+						expanded[j] = (unsigned int)((i & 1) ? b : a);
+						expanded[j + 1] = (unsigned int)((i & 1) ? a : b);
+						expanded[j + 2] = (unsigned int)c;
+					}
+					n = triangles * 3;
+					ip = (const unsigned char *)expanded;
+					index_type = 1;
+				} else if (type != 3) {
+					/* Lines and points are not implemented by this rasterizer. */
+					n = 0;
+				}
 				int submitted = 0;
 				if (host_ok) {
 					submitted = sweet_ca_batch(&r, host_surface, ip, n,
