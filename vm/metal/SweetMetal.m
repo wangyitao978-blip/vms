@@ -937,13 +937,12 @@ sweet_ca_flush(void)
 	unsigned long long flush_t0 = mach_absolute_time();
 	/*
 	 * The host may still be rasterizing earlier batches when this flush
-	 * arrives. The kernel waits 4 x 250 ms; a timeout there is not just a
-	 * lost frame: the guest would continue and could release the surface
-	 * while the host is still writing its pages (that corrupted an
-	 * IOTimerEventSource and panicked the kernel). Keep the surface alive
-	 * and retry until the host acknowledges the sequence.
+	 * arrives. Each host acknowledgement wait is bounded at five seconds.
+	 * A timeout is not just a lost frame: the guest could release the surface
+	 * while the host is still writing its pages. Retry a small number of times
+	 * before disabling host draws and returning to the guest rasterizer.
 	 */
-	for (int attempt = 0; attempt < 12; attempt++) {
+	for (int attempt = 0; attempt < 3; attempt++) {
 		result = IOConnectCallStructMethod(sweet_accel_port, 0x103,
 		    &sequence, sizeof(sequence), 0, &output_size);
 		if (result == 0) {
