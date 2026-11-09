@@ -3586,7 +3586,23 @@ struct SweetBlockHeader {
 
 - (id)error
 {
-	return 0;
+	if (command_status != 5) {
+		return 0;
+	}
+	Class error_class = objc_getClass("NSError");
+	Class string_class = objc_getClass("NSString");
+	if (error_class == 0 || string_class == 0) {
+		return 0;
+	}
+	id domain = ((id (*)(id, SEL, const char *))objc_msgSend)(
+	    (id)string_class, sel_registerName("stringWithUTF8String:"),
+	    "SweetMetalCommandBufferError");
+	if (domain == 0) {
+		return 0;
+	}
+	return ((id (*)(id, SEL, id, long, id))objc_msgSend)(
+	    (id)error_class, sel_registerName("errorWithDomain:code:userInfo:"),
+	    domain, 1L, 0);
 }
 
 - (int)flushFills
