@@ -36,16 +36,10 @@ public final class GpuWireServer {
     private static final int FORMAT_R32F = 55;
     private static final int PIXEL_BYTES = WIDTH * HEIGHT * 4;
 
-    /* Guest panel: ADT framebuffer at guest PA 0x9c000000, QEMU RAM at 0x40000000. */
     private static final long RAM_PA = 0x40000000L;
-    private static final long PANEL_PA = 0x9c000000L;
-    private static final long PANEL_OFF = PANEL_PA - RAM_PA;
-    private static final int PANEL_BPR = 1080 * 4;
-    private static final int PANEL_WIDTH = 1080;
 
     private static GpuWireServer instance;
     private static File guestRam;
-    private static boolean panelStarted;
     private static int wireLogs;
     private static int dumpLogs;
 
@@ -189,10 +183,6 @@ public final class GpuWireServer {
             long end = System.nanoTime();
             Log.i(TAG, "op=" + operation + " request=" + request + " clears=" + clears
                     + " gpu_ns=" + (end - start));
-            if (guestRam != null) {
-                startPanelBlit(gpu);
-            }
-
             ByteBuffer reply = ByteBuffer.allocate(16 + 32 + PIXEL_BYTES)
                     .order(ByteOrder.LITTLE_ENDIAN);
             reply.putInt(MAGIC);
@@ -279,50 +269,6 @@ public final class GpuWireServer {
         } catch (Exception e) {
             Log.w(TAG, "fill failed", e);
         }
-    }
-
-    /*
-     * End-to-end check of the host GPU path: take the colour the GL clear
-     * produced, then paint a moving square straight into the guest panel
-     * surface through the shared RAM file. The guest is expected to show it
-     * on screen once the kernel console stops drawing.
-     */
-    private static void startPanelBlit(ClearRenderer gpu) {
-        synchronized (GpuWireServer.class) {
-            if (panelStarted || guestRam == null) {
-                return;
-            }
-            panelStarted = true;
-        }
-        final int color = gpu.pixel(1f, 0f, 0f);
-        final int white = gpu.pixel(1f, 1f, 1f);
-        Thread t = new Thread(() -> {
-            Log.i(TAG, "panel blit color=#" + Integer.toHexString(color)
-                    + " off=0x" + Long.toHexString(PANEL_OFF));
-            final int y0 = 300, rows = 480, bar = 48;
-            byte[] row = new byte[PANEL_WIDTH * 4];
-            try (RandomAccessFile f = new RandomAccessFile(guestRam, "rw")) {
-                for (int i = 0; i < 600; i++) {
-                    int barX = (i * 9) % (PANEL_WIDTH - bar);
-                    for (int px = 0; px < PANEL_WIDTH; px++) {
-                        int c = (px >= barX && px < barX + bar) ? white : color;
-                        row[px * 4] = (byte) (c >> 16);	/* R */
-                        row[px * 4 + 1] = (byte) (c >> 8);	/* G */
-                        row[px * 4 + 2] = (byte) c;	/* B */
-                        row[px * 4 + 3] = (byte) 0xff;
-                    }
-                    for (int yy = 0; yy < rows; yy++) {
-                        f.seek(PANEL_OFF + (long) (y0 + yy) * PANEL_BPR);
-                        f.write(row);
-                    }
-                    Thread.sleep(250);
-                }
-            } catch (Exception e) {
-                Log.w(TAG, "panel blit failed", e);
-            }
-        }, "sweetgpu-panel");
-        t.setDaemon(true);
-        t.start();
     }
 
     private static final class ClearRenderer {
