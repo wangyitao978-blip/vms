@@ -596,7 +596,8 @@ final class CaCompositor {
         int uploadGeneration = 0;
         if ((flags & F_UPLOAD_TEX) != 0) {
             Upload u = uploads.get(id);
-            if (u == null || !u.ready) {
+            if (u == null || !u.ready || u.width != width || u.height != height
+                    || u.bpr != bpr || u.texFmt != fmt || u.internal != internal) {
                 return null;
             }
             uploadGeneration = u.gen;
