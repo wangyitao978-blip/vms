@@ -562,6 +562,7 @@ typedef struct {
 	id surface;
 	unsigned char *base;
 	unsigned long width, height, bytes_per_row;
+	unsigned int pixel_format;
 } SweetSurfaceMapping;
 
 static void *sweet_iosurface_library;
@@ -596,8 +597,10 @@ sweet_surface_map(unsigned int identifier, SweetSurfaceMapping *mapping)
 	    sweet_iosurface_symbol("IOSurfaceGetHeight");
 	unsigned long (*bpr)(id) = (unsigned long (*)(id))
 	    sweet_iosurface_symbol("IOSurfaceGetBytesPerRow");
+	unsigned int (*pixel_format)(id) = (unsigned int (*)(id))
+	    sweet_iosurface_symbol("IOSurfaceGetPixelFormat");
 	if (lookup == 0 || lock == 0 || base == 0 || width == 0 || height == 0 ||
-	    bpr == 0) {
+	    bpr == 0 || pixel_format == 0) {
 		return -1;
 	}
 	id surface = lookup(identifier);
@@ -613,8 +616,15 @@ sweet_surface_map(unsigned int identifier, SweetSurfaceMapping *mapping)
 	mapping->width = width(surface);
 	mapping->height = height(surface);
 	mapping->bytes_per_row = bpr(surface);
+	mapping->pixel_format = pixel_format(surface);
 	if (mapping->base == 0) {
-		mapping->surface = 0;
+		int (*unlock)(id, unsigned int, unsigned int *) = (int (*)(id,
+		    unsigned int, unsigned int *))sweet_iosurface_symbol("IOSurfaceUnlock");
+		if (unlock != 0) unlock(surface, 0, &seed);
+		void (*release_surface)(id) = (void (*)(id))
+		    sweet_iosurface_symbol("IOSurfaceRelease");
+		if (release_surface != 0) release_surface(surface);
+		bzero(mapping, sizeof(*mapping));
 		return -1;
 	}
 	return 0;
@@ -3200,20 +3210,23 @@ sweet_texture_surface(id texture)
 			r.tex_bpr = ((unsigned long (*)(id, SEL))objc_msgSend)(enc_tex[i],
 			    sel_registerName("bytesPerRow"));
 			r.tex_surface = sid;
-			/* Uploaded pixels keep their declared format; IOSurface memory
-			 * this process renders into, and offscreen targets it has
-			 * rendered, are RGBA8 whatever the format says. */
-			r.tex_internal = src_mapped ? 1 : 0;
+			/*
+			 * IOSurface's own pixel format is authoritative for cross-process
+			 * memory. A mapped surface is not automatically our private RGBA8
+			 * render target: decode its native format and actual row stride.
+			 */
+			if (src_mapped) {
+				r.tex_fmt_px = src_map.pixel_format;
+				r.tex_w = src_map.width;
+				r.tex_h = src_map.height;
+				r.tex_bpr = src_map.bytes_per_row;
+			}
+			r.tex_internal = 0;
 			if (!r.tex_internal && ((BOOL (*)(id, SEL, Class))objc_msgSend)(
 			    enc_tex[i], sel_registerName("isKindOfClass:"),
 			    objc_getClass("SweetTexture"))) {
 				r.tex_internal = ((unsigned long (*)(id, SEL))objc_msgSend)(
 				    enc_tex[i], sel_registerName("rendered")) != 0;
-			}
-			if (src_mapped) {
-				if (r.tex_w == 0) r.tex_w = src_map.width;
-				if (r.tex_h == 0) r.tex_h = src_map.height;
-				if (r.tex_bpr == 0) r.tex_bpr = src_map.bytes_per_row;
 			}
 		}
 		r.dst = enc_map.base;
