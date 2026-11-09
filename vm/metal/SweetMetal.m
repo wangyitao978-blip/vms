@@ -2432,8 +2432,7 @@ sweet_decode_texel(unsigned long fmt, const unsigned char *p, float t[4])
 		t[0] = sweet_xr16(h[2]);
 		t[1] = sweet_xr16(h[1]);
 		t[2] = sweet_xr16(h[0]);
-		/* XR expands RGB only; alpha remains linear UNORM. */
-		t[3] = (float)h[3] / 65535.0f;
+		t[3] = sweet_xr16(h[3]);
 		break;
 	}
 	case 554: case 555: {
