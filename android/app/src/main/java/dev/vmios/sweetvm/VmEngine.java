@@ -392,6 +392,15 @@ public final class VmEngine {
                     listener.onError("无法映射共享显存: " + e.getMessage());
                 }
             }
+            if (map == null) {
+                if (ch != null) {
+                    try {
+                        ch.close();
+                    } catch (IOException ignored) {
+                    }
+                }
+                return;
+            }
             // Deadline pacing, not Thread.sleep: a fixed sleep adds the copy
             // time to every interval, so a 16 fps guest sampled at 30 fps
             // drifts and beats (judder). Keep a monotonic deadline and park
