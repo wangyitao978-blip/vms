@@ -619,11 +619,6 @@ final class CaCompositor {
         return raw * (2.003921568627451f / 65535.0f) - 0.7529411764705882f;
     }
 
-    private static float srgbDecode(float c) {
-        return c <= 0.04045f ? c / 12.92f
-                : (float) Math.pow((c + 0.055f) / 1.055f, 2.4);
-    }
-
     private static int decode(ByteBuffer b, int i, int fmt, boolean internal) {
         if (internal) {
             int p = b.getInt(i);
@@ -705,11 +700,6 @@ final class CaCompositor {
                 float bl = xr10(raw & 0x3ff);
                 float g = xr10((raw >> 10) & 0x3ff);
                 float r = xr10((raw >> 20) & 0x3ff);
-                if (fmt == 555) {
-                    r = srgbDecode(r);
-                    g = srgbDecode(g);
-                    bl = srgbDecode(bl);
-                }
                 return pack(r, g, bl, 1f);
             }
             /*
@@ -717,17 +707,10 @@ final class CaCompositor {
              */
             case 552:
             case 553: {
-                /* Apple stores ten XR data bits in the high portion of each 16-bit lane. */
-                float bl = xr10((b.getShort(i) & 0xffff) >>> 6);
-                float g = xr10((b.getShort(i + 2) & 0xffff) >>> 6);
-                float r = xr10((b.getShort(i + 4) & 0xffff) >>> 6);
-                float a = xr10((b.getShort(i + 6) & 0xffff) >>> 6);
-                a = Math.max(0f, Math.min(1f, a));
-                if (fmt == 553) {
-                    r = srgbDecode(r);
-                    g = srgbDecode(g);
-                    bl = srgbDecode(bl);
-                }
+                float bl = xr16(b.getShort(i) & 0xffff);
+                float g = xr16(b.getShort(i + 2) & 0xffff);
+                float r = xr16(b.getShort(i + 4) & 0xffff);
+                float a = xr16(b.getShort(i + 6) & 0xffff);
                 return pack(r, g, bl, a);
             }
             case 105: {
