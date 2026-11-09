@@ -464,7 +464,7 @@ Java_dev_vmios_sweetvm_CaCompositor_nativeTriangle(JNIEnv *env, jclass cls,
         c.br = br; c.bg = bg; c.bb = bb; c.ba = ba;
         c.cr = cr; c.cg = cg; c.cb = cb; c.ca = ca;
         c.sr = sr; c.sg = sg; c.sb = sb; c.sa = sa;
-        c.opaque_solid = solid && sa >= 1.0f;
+        c.opaque_solid = solid && sa >= 1.0f && blend != 46;
         if (c.opaque_solid) {
             /* Match Java's integer truncation in the fallback rasterizer. */
             int ri = (int)(sr * 255.0f);
