@@ -15,7 +15,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(SweetFBState, SWEET_FB)
 #define SWEET_FB_MAGIC           0x31424653u
 #define SWEET_FB_MAX_DESCRIPTORS ((SWEET_FB_COMMAND_SIZE - SWEET_FB_HEADER_SIZE) / SWEET_FB_DESCRIPTOR_SIZE)
 #define SWEET_FB_MAX_COPY        16384u
-#define SWEET_FB_FRAME_SIZE      (1080u * 2400u * 4u)
+#define SWEET_FB_FRAME_SIZE      (1125u * 2436u * 4u)
 
 struct SweetFBState {
     SysBusDevice parent_obj;
