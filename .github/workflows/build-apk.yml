@@ -45,8 +45,8 @@ jobs:
           test -s "$ENGINE_DIR/qemu-system-aarch64"
           test -s "$ENGINE_DIR/libglib-2.0.so.0"
           chmod 755 "$ENGINE_DIR/qemu-system-aarch64"
-          ENGINE_FINGERPRINT="$(find "$ENGINE_DIR" -maxdepth 1 -type f ! -name '.vmios-engine-version' -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
-          printf '%s\n' "$ENGINE_FINGERPRINT" > "$ENGINE_DIR/.vmios-engine-version"
+          ENGINE_FINGERPRINT="$(find "$ENGINE_DIR" -maxdepth 1 -type f ! -name 'vmios-engine-version' -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
+          printf '%s\n' "$ENGINE_FINGERPRINT" > "$ENGINE_DIR/vmios-engine-version"
           echo "QEMU engine fingerprint: $ENGINE_FINGERPRINT"
           echo "Staged ARM64 engine files:"
           find "$ENGINE_DIR" -maxdepth 1 -type f -printf '%f %s bytes\\n' | sort
@@ -107,8 +107,8 @@ jobs:
           test -s "$APK"
           unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/qemu-system-aarch64'
           unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/libglib-2.0.so.0'
-          unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/.vmios-engine-version'
-          unzip -p "$APK" 'assets/engine/arm64-v8a/.vmios-engine-version' | grep -Eq "^[0-9a-f]{64}$"
+          unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/vmios-engine-version'
+          unzip -p "$APK" 'assets/engine/arm64-v8a/vmios-engine-version' | grep -Eq "^[0-9a-f]{64}$"
           unzip -Z1 "$APK" | grep -Fx 'lib/arm64-v8a/libsweetraster.so'
           unzip -Z1 "$APK" | grep -Fx 'classes2.dex'
           unzip -p "$APK" classes2.dex > /tmp/classes2.dex
