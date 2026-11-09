@@ -60,6 +60,12 @@ static bool sweet_fb_dma_write(hwaddr address, const void *buffer, size_t length
                                MEMTXATTRS_UNSPECIFIED, buffer, length) == MEMTX_OK;
 }
 
+static bool sweet_fb_ranges_overlap(uint64_t a, uint64_t a_size,
+                                    uint64_t b, uint64_t b_size)
+{
+    return a < b + b_size && b < a + a_size;
+}
+
 static void sweet_fb_present(SweetFBState *s, uint32_t sequence)
 {
     uint8_t header[SWEET_FB_HEADER_SIZE];
@@ -90,6 +96,7 @@ static void sweet_fb_present(SweetFBState *s, uint32_t sequence)
         uint32_t length = sweet_fb_get32(d + 12);
 
         if (!length || length > SWEET_FB_MAX_COPY ||
+            source > UINT64_MAX - length ||
             destination > s->frame_size ||
             length > s->frame_size - destination) {
             ok = false;
@@ -153,6 +160,18 @@ static void sweet_fb_realize(DeviceState *dev, Error **errp)
 
     if (s->frame_size == 0 || s->frame_size > SWEET_FB_MAX_FRAME_SIZE) {
         error_setg(errp, "sweet-fb frame-size must be between 1 and 16 MiB");
+        return;
+    }
+    if ((s->mmio_base & 3u) != 0 ||
+        s->mmio_base > UINT64_MAX - SWEET_FB_MMIO_SIZE ||
+        s->frame_base > UINT64_MAX - s->frame_size ||
+        s->command_base > UINT64_MAX - SWEET_FB_COMMAND_SIZE) {
+        error_setg(errp, "sweet-fb address range overflows or is misaligned");
+        return;
+    }
+    if (sweet_fb_ranges_overlap(s->frame_base, s->frame_size,
+                                s->command_base, SWEET_FB_COMMAND_SIZE)) {
+        error_setg(errp, "sweet-fb frame and command ranges overlap");
         return;
     }
 
