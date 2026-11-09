@@ -30,7 +30,7 @@ GICD, GICD_SIZE = 0x17a00000, 0x10000
 GICR, GICR_SIZE = 0x17a60000, 0x100000
 FB, FB_SIZE = 0x9c000000, 0x1700000
 SWEET_ECID = 0x5357454554000001  # 'SWEET' + 1, synthetic
-FB_W, FB_H, FB_STRIDE = 1080, 2400, 1080 * 4
+FB_W, FB_H, FB_STRIDE = 1125, 2436, 1125 * 4
 # Internal UFS host (ufshc@1d84000 "ufs_mem"). QEMU gets a synthetic host in
 # the free MMIO hole below the PCIe window; see vm/qemu/sweet_ufs.c.
 UFS, UFS_SIZE = 0x01d84000, 0x3000
