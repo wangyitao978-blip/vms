@@ -60,9 +60,28 @@ public final class EngineAssets {
         return new Engine(dir, qemu, version);
     }
 
-    /** Identifies the extracted engine; snapshots are only valid for the same one. */
+    /**
+     * Identify the actual QEMU asset set, not the APK installation timestamp.
+     * Updating the Android UI must not invalidate a multi-hour iOS boot snapshot
+     * when the bundled QEMU engine itself has not changed.
+     */
     public static String currentVersion(Context ctx) throws IOException {
-        return engineVersion(ctx) + "-" + supportedAbi();
+        String abi = supportedAbi();
+        String assetPath = "engine/" + abi + "/.vmios-engine-version";
+        try (InputStream in = ctx.getAssets().open(assetPath)) {
+            byte[] b = new byte[128];
+            int n = in.read(b);
+            if (n > 0) {
+                String fingerprint = new String(b, 0, n, StandardCharsets.US_ASCII).trim();
+                if (!fingerprint.isEmpty()) {
+                    return "asset-" + fingerprint + "-" + abi;
+                }
+            }
+        } catch (IOException missingManifest) {
+            // Older APKs have no engine manifest. Preserve their legacy
+            // invalidation behavior until an APK carrying the manifest is used.
+        }
+        return engineVersion(ctx) + "-" + abi;
     }
 
     public static String supportedAbi() throws IOException {
