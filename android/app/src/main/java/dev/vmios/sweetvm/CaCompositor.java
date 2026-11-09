@@ -533,6 +533,22 @@ final class CaCompositor {
             float cg = b.getFloat(offset + 84);
             float cb = b.getFloat(offset + 88);
             float ca = b.getFloat(offset + 92);
+            if (!Float.isFinite(ax) || !Float.isFinite(ay)
+                    || !Float.isFinite(au) || !Float.isFinite(av)
+                    || !Float.isFinite(ar) || !Float.isFinite(ag)
+                    || !Float.isFinite(ab) || !Float.isFinite(aa)
+                    || !Float.isFinite(bx) || !Float.isFinite(by)
+                    || !Float.isFinite(bu) || !Float.isFinite(bv)
+                    || !Float.isFinite(br) || !Float.isFinite(bg)
+                    || !Float.isFinite(bb) || !Float.isFinite(ba)
+                    || !Float.isFinite(cx) || !Float.isFinite(cy)
+                    || !Float.isFinite(cu) || !Float.isFinite(cv)
+                    || !Float.isFinite(cr) || !Float.isFinite(cg)
+                    || !Float.isFinite(cb) || !Float.isFinite(ca)) {
+                dropped++;
+                offset += 3 * VERTEX_BYTES;
+                continue;
+            }
             offset += 3 * VERTEX_BYTES;
             long covered = triangle(dst, x0, y0, x1, y1, blend, tex, textured,
                     ax, ay, au, av, ar, ag, ab, aa,
