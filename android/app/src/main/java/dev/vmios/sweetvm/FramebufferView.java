@@ -22,7 +22,7 @@ public final class FramebufferView extends View {
     private final Paint paint = new Paint(0);
 
     public interface TouchListener {
-        /** type: 0 up, 1 down, 2 move; x/y are native guest framebuffer pixels. */
+        /** type: 0 up, 1 down, 2 move; x/y are scaled into the emulated 1080x2400 touch-controller range. */
         void onGuestTouch(int type, int x, int y);
     }
 
@@ -46,12 +46,17 @@ public final class FramebufferView extends View {
                 && y < imageTop() + Payload.FB_H;
     }
 
-    private int clampX(float x) {
-        return Math.max(0, Math.min(Payload.FB_W - 1, (int) x));
+    // sweet-touch emulates a 1080x2400 Goodix panel independently of the
+    // framebuffer dimensions. Keep display pixels 1:1, but scale input into
+    // the controller's coordinate space.
+    private int touchX(float x) {
+        int v = (int) (x * 1080f / Payload.FB_W);
+        return Math.max(0, Math.min(1079, v));
     }
 
-    private int clampY(float y) {
-        return Math.max(0, Math.min(Payload.FB_H - 1, (int) y));
+    private int touchY(float y) {
+        int v = (int) (y * 2400f / Payload.FB_H);
+        return Math.max(0, Math.min(2399, v));
     }
 
     @Override
@@ -65,16 +70,16 @@ public final class FramebufferView extends View {
                 return true;
             }
             touchActive = true;
-            sendTouch(1, clampX(x), clampY(y));
+            sendTouch(1, touchX(x), touchY(y));
             return true;
         }
         if (!touchActive) {
             return true;
         }
         if (action == MotionEvent.ACTION_MOVE) {
-            sendTouch(2, clampX(x), clampY(y));
+            sendTouch(2, touchX(x), touchY(y));
         } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-            sendTouch(0, clampX(x), clampY(y));
+            sendTouch(0, touchX(x), touchY(y));
             touchActive = false;
         }
         return true;
