@@ -67,6 +67,10 @@ OBJECT_DECLARE_SIMPLE_TYPE(SweetTouchState, SWEET_TOUCH)
 #define RX_MAX        128
 #define TX_MAX        16
 
+/* Keep the QEMU touch device aligned with the 1125x2436 panel in mkadt.py. */
+#define SWEET_TOUCH_PANEL_WIDTH  1125u
+#define SWEET_TOUCH_PANEL_HEIGHT 2436u
+
 struct SweetTouchState {
     SysBusDevice parent_obj;
 
@@ -152,8 +156,8 @@ static void sweet_touch_sync_file(SweetTouchState *s)
             s->touch_release = true;
         }
         s->touch_down = b[0] != 0;
-        s->touch_x = x >= 1080 ? 1079 : x;
-        s->touch_y = y >= 2400 ? 2399 : y;
+        s->touch_x = x >= SWEET_TOUCH_PANEL_WIDTH ? SWEET_TOUCH_PANEL_WIDTH - 1 : x;
+        s->touch_y = y >= SWEET_TOUCH_PANEL_HEIGHT ? SWEET_TOUCH_PANEL_HEIGHT - 1 : y;
     }
     qemu_mutex_unlock(&s->lock);
 }
@@ -376,11 +380,11 @@ static void sweet_touch_receive(void *opaque, const uint8_t *buf, int size)
             uint16_t x = s->in[1] | (s->in[2] << 8);
             uint16_t y = s->in[3] | (s->in[4] << 8);
             s->in_len = 0;
-            if (x >= 1080) {
-                x = 1079;
+            if (x >= SWEET_TOUCH_PANEL_WIDTH) {
+                x = SWEET_TOUCH_PANEL_WIDTH - 1;
             }
-            if (y >= 2400) {
-                y = 2399;
+            if (y >= SWEET_TOUCH_PANEL_HEIGHT) {
+                y = SWEET_TOUCH_PANEL_HEIGHT - 1;
             }
             qemu_mutex_lock(&s->lock);
             s->touch_down = type != 0;
