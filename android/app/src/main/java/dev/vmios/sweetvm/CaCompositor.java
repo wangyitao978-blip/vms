@@ -710,8 +710,7 @@ final class CaCompositor {
                 float bl = xr16(b.getShort(i) & 0xffff);
                 float g = xr16(b.getShort(i + 2) & 0xffff);
                 float r = xr16(b.getShort(i + 4) & 0xffff);
-                /* Apple XR transfer applies to RGB; the alpha lane is ordinary UNORM. */
-                float a = (b.getShort(i + 6) & 0xffff) / 65535f;
+                float a = xr16(b.getShort(i + 6) & 0xffff);
                 return pack(r, g, bl, a);
             }
             case 105: {
