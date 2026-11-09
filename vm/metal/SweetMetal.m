@@ -2275,6 +2275,7 @@ typedef struct {
 	id tex_owner;
 	unsigned long blend_fn, tex_fn, dst_fn, img_count;
 	unsigned char *dst;
+	int dst_bgra;
 	unsigned long dst_w, dst_h, dst_bpr;
 	int clip_x0, clip_y0, clip_x1, clip_y1;
 	int dbg_n;
@@ -2399,10 +2400,21 @@ sweet_decode_texel(unsigned long fmt, const unsigned char *p, float t[4])
 	}
 	case 552: case 553: {
 		const unsigned short *h = (const unsigned short *)p;
-		t[0] = sweet_xr16(h[0]);
+		/* BGRA component order in memory; convert to canonical RGBA. */
+		t[0] = sweet_xr16(h[2]);
 		t[1] = sweet_xr16(h[1]);
-		t[2] = sweet_xr16(h[2]);
-		t[3] = (float)h[3] / 65535.0f;
+		t[2] = sweet_xr16(h[0]);
+		t[3] = sweet_xr16(h[3]);
+		break;
+	}
+	case 554: case 555: {
+		/* BGR10_XR: B/G/R occupy bits 0..9/10..19/20..29.
+		 * The upper two bits are padding, not an alpha channel. */
+		unsigned int raw = *(const unsigned int *)p;
+		t[0] = sweet_xr10((raw >> 20) & 0x3ff);
+		t[1] = sweet_xr10((raw >> 10) & 0x3ff);
+		t[2] = sweet_xr10(raw & 0x3ff);
+		t[3] = 1.0f;
 		break;
 	}
 	case 105: {
@@ -2539,9 +2551,10 @@ sweet_blend_pixel(SweetRaster *r, int x, int y, const float col[4])
 	}
 	if (a > 1.0f) a = 1.0f;
 	float sr = col[0] * a, sg = col[1] * a, sb = col[2] * a;
-	float dr = (float)p[0] / 255.0f;
+	/* Screen-sized staging is BGRA; heap render targets are RGBA. */
+	float dr = (float)p[r->dst_bgra ? 2 : 0] / 255.0f;
 	float dg = (float)p[1] / 255.0f;
-	float db = (float)p[2] / 255.0f;
+	float db = (float)p[r->dst_bgra ? 0 : 2] / 255.0f;
 	float da = (float)p[3] / 255.0f;
 	float inv = 1.0f - a;
 	float orr = sr + dr * inv;
@@ -2560,9 +2573,9 @@ sweet_blend_pixel(SweetRaster *r, int x, int y, const float col[4])
 		ob = sb * l4 + db * (1.0f - a * l4);
 		oa = a * l4 + da * (1.0f - a * l4);
 	}
-	p[0] = (unsigned char)(orr > 1.0f ? 255.0f : orr * 255.0f);
+	p[r->dst_bgra ? 2 : 0] = (unsigned char)(orr > 1.0f ? 255.0f : orr * 255.0f);
 	p[1] = (unsigned char)(og > 1.0f ? 255.0f : og * 255.0f);
-	p[2] = (unsigned char)(ob > 1.0f ? 255.0f : ob * 255.0f);
+	p[r->dst_bgra ? 0 : 2] = (unsigned char)(ob > 1.0f ? 255.0f : ob * 255.0f);
 	p[3] = (unsigned char)(oa > 1.0f ? 255.0f : oa * 255.0f);
 }
 
@@ -3229,6 +3242,7 @@ sweet_texture_surface(id texture)
 		    sweet_stage_ensure((unsigned long)r.dst_w, (unsigned long)r.dst_h,
 		        (unsigned long)r.dst_bpr)) {
 			r.dst = sweet_stage_base;
+			r.dst_bgra = 1; /* sweet_stage_ensure creates IOSurface BGRA */
 			r.dst_w = sweet_stage_w;
 			r.dst_h = sweet_stage_h;
 			r.dst_bpr = sweet_stage_bpr;
