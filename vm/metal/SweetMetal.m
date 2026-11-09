@@ -3489,7 +3489,7 @@ sweet_texture_surface(id texture)
 - (id)renderCommandEncoderWithDescriptor:(id)descriptor;
 - (id)blitCommandEncoder;
 - (id)computeCommandEncoder;
-- (void)flushFills;
+- (int)flushFills;
 - (int)sweet_presentDrawables:(int)shouldPresent;
 @end
 
@@ -3589,8 +3589,9 @@ struct SweetBlockHeader {
 	return 0;
 }
 
-- (void)flushFills
+- (int)flushFills
 {
+	int ok = 1;
 	for (int i = 0; i < pending_count; i++) {
 		unsigned int request[6] = {
 			pending_surface[i], pending_color[i], 0, 0, 0, 0
@@ -3598,6 +3599,9 @@ struct SweetBlockHeader {
 		unsigned long output_size = 0;
 		int result = IOConnectCallStructMethod(sweet_accel_port, 0x100,
 		    request, sizeof(request), 0, &output_size);
+		if (result != 0) {
+			ok = 0;
+		}
 		if (sweet_fill_logs < 12) {
 			sweet_fill_logs++;
 			dprintf(console_fd,
@@ -3606,6 +3610,7 @@ struct SweetBlockHeader {
 		}
 	}
 	pending_count = 0;
+	return ok;
 }
 
 - (void)commit
@@ -3619,7 +3624,7 @@ struct SweetBlockHeader {
 	[self sweet_invokeScheduledHandlers];
 	int host_complete = sweet_ca_flush() && !sweet_ca_frame_failed;
 	sweet_ca_frame_failed = 0;
-	[self flushFills];
+	host_complete = [self flushFills] && host_complete;
 	if (host_complete) {
 		if ([self sweet_presentDrawables:1] == 0) {
 			sweet_present_pending();
