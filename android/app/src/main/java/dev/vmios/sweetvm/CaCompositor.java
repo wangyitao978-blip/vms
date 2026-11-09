@@ -964,9 +964,11 @@ final class CaCompositor {
                             colB *= colA;
                         }
                         int dstPixel = buf.getInt(index);
-                        float dr = (dstPixel & 0xff) / 255f;
+                        // Guest pixels are 0xAARRGGBB integers (BGRA bytes
+                        // in little-endian RAM): red is bits 16..23, blue 0..7.
+                        float dr = ((dstPixel >> 16) & 0xff) / 255f;
                         float dg = ((dstPixel >> 8) & 0xff) / 255f;
-                        float db = ((dstPixel >> 16) & 0xff) / 255f;
+                        float db = (dstPixel & 0xff) / 255f;
                         float da = ((dstPixel >> 24) & 0xff) / 255f;
                         float invA = 1f - colA;
                         float orr = colR + dr * invA;
