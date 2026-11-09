@@ -12,6 +12,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
+import java.io.RandomAccessFile;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -214,15 +215,6 @@ public final class GpuWireServer {
             }
         }
         return compositor;
-    }
-
-    private static RandomAccessFile panelFile;
-
-    private static synchronized RandomAccessFile panelFile() throws Exception {
-        if (panelFile == null) {
-            panelFile = new RandomAccessFile(guestRam, "rw");
-        }
-        return panelFile;
     }
 
     /*
