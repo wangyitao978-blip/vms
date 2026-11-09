@@ -219,8 +219,15 @@ public final class VmEngine {
         cmd.add("-nic"); cmd.add("none");
         cmd.add("-L"); cmd.add(qemuShare.getAbsolutePath());
         if (offload) {
+            long frameBytes = (long) Payload.FB_STRIDE * Payload.FB_H;
+            // The SWEET-FB command/status page begins 16 MiB after the panel.
+            // Keep the panel entirely below it and pass the actual dimensions
+            // to QEMU instead of relying on its old 1080x2400 default.
+            if (frameBytes <= 0 || frameBytes > 0x01000000L) {
+                throw new IOException("sweet-fb 面板大小必须小于等于 16 MiB");
+            }
             cmd.add("-device");
-            cmd.add("sweet-fb");
+            cmd.add("sweet-fb,frame-size=" + frameBytes);
         }
         if (gpuWire) {
             // Guest -> Android host GPU pipe: the ADT's virtio0 node maps the
