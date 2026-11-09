@@ -319,12 +319,19 @@ public final class VmEngine {
         if (cpus >= 2) {
             final File qs = qmpSocket;
             Thread probe = new Thread(() -> {
-                try {
-                    Thread.sleep(40000);
-                } catch (InterruptedException e) {
-                    return;
+                // A single snapshot cannot distinguish transient kernel work
+                // from a vCPU that remains stuck. Sample repeatedly so the
+                // PC movement (or lack of it) is visible in logcat.
+                for (int sample = 1; sample <= 7; sample++) {
+                    try {
+                        Thread.sleep(sample == 1 ? 40000 : 30000);
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                    android.util.Log.i("sweetvm", "qmp cpu snapshot " + sample
+                            + "/7 elapsed_ms=" + android.os.SystemClock.elapsedRealtime());
+                    Snapshot.probeCpus(qs);
                 }
-                Snapshot.probeCpus(qs);
             }, "sweetvm-qmp");
             probe.setDaemon(true);
             probe.start();
