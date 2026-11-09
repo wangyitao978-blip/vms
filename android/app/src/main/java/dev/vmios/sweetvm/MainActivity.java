@@ -661,7 +661,7 @@ public final class MainActivity extends Activity {
             // as MTTCG. Previously it only added tcgmulti=1; payloads carrying
             // cpus=1 therefore still launched a single-vCPU guest.
             java.util.regex.Matcher cpu = java.util.regex.Pattern
-                    .compile("(^|\\\\s)cpus=\\\\d+").matcher(cmd);
+                    .compile("(^|\\s)cpus=\\d+").matcher(cmd);
             if (cpu.find()) {
                 cmd = cpu.replaceAll("$1cpus=2");
             } else {
@@ -986,7 +986,7 @@ public final class MainActivity extends Activity {
         box.addView(fpsLabel);
         box.addView(seek);
         box.addView(text("QEMU 固定 3 GB 客户机内存；vCPU 数取自 cpus=N，默认单线程 TCG。"
-                + "tcgmulti=1 可试验多线程 TCG（当前会触发内核 panic）。参数长度上限 607 字节。",
+                + "勾选多线程 TCG 会自动设置 cpus=2 和 tcgmulti=1。参数长度上限 607 字节。",
                 10, DIM, false));
         AlertDialog d = new AlertDialog.Builder(this)
                 .setTitle("高级选项")
