@@ -181,6 +181,9 @@ final class CaCompositor {
         int height;
         boolean fromUpload;
         int gen;
+        int bpr;
+        int fmt;
+        boolean internal;
     }
 
     /* ---- wire messages -------------------------------------------------- */
@@ -241,6 +244,9 @@ final class CaCompositor {
             }
             int slot = pageIndex + i;
             long previous = s.pages[slot];
+            if (previous != pa) {
+                decoded.remove(id);
+            }
             if (previous == 0 && pa != 0) {
                 s.received++;
             } else if (previous != 0 && pa == 0) {
@@ -546,8 +552,10 @@ final class CaCompositor {
 
     private Decoded texture(int flags, int id, int width, int height, int bpr, int fmt) {
         boolean uploaded = (flags & F_UPLOAD_TEX) != 0;
+        boolean internal = (flags & F_INTERNAL) != 0;
         Decoded cached = decoded.get(id);
-        if (cached != null && cached.width == width && cached.height == height) {
+        if (cached != null && cached.width == width && cached.height == height
+                && cached.bpr == bpr && cached.fmt == fmt && cached.internal == internal) {
             if (!uploaded) {
                 return cached;
             }
@@ -556,7 +564,6 @@ final class CaCompositor {
                 return cached;
             }
         }
-        boolean internal = (flags & F_INTERNAL) != 0;
         int bytesPerTexel = internal ? 4 : bpp(fmt);
         long minimumRow = (long) width * bytesPerTexel;
         if (width <= 0 || height <= 0 || bpr <= 0 || width > 8192 || height > 8192
@@ -594,6 +601,9 @@ final class CaCompositor {
         d.height = height;
         d.fromUpload = uploadGeneration != 0;
         d.gen = uploadGeneration;
+        d.bpr = bpr;
+        d.fmt = fmt;
+        d.internal = internal;
         decoded.put(id, d);
         decodeCount++;
         return d;
