@@ -50,6 +50,7 @@ void *malloc(unsigned long size);
 void *calloc(unsigned long count, unsigned long size);
 void *memcpy(void *dst, const void *src, unsigned long n);
 void bzero(void *dst, unsigned long n);
+float powf(float, float);
 int mincore(void *addr, unsigned long length, char *vec);
 SEL sel_registerName(const char *name);
 const char *sel_getName(SEL sel);
@@ -2359,6 +2360,13 @@ sweet_xr16(unsigned long raw)
 	return (float)raw * (2.003921568627451f / 65535.0f) - 0.7529411764705882f;
 }
 
+static float
+sweet_srgb_decode(float c)
+{
+	if (c <= 0.04045f) return c / 12.92f;
+	return powf((c + 0.055f) / 1.055f, 2.4f);
+}
+
 static void
 sweet_decode_texel(unsigned long fmt, const unsigned char *p, float t[4])
 {
@@ -2428,21 +2436,32 @@ sweet_decode_texel(unsigned long fmt, const unsigned char *p, float t[4])
 	}
 	case 552: case 553: {
 		const unsigned short *h = (const unsigned short *)p;
-		/* BGRA component order in memory; convert to canonical RGBA. */
-		t[0] = sweet_xr16(h[2]);
-		t[1] = sweet_xr16(h[1]);
-		t[2] = sweet_xr16(h[0]);
-		t[3] = sweet_xr16(h[3]);
+		/* BGRA10_XR stores ten data bits in bits 6..15 of each 16-bit lane. */
+		t[0] = sweet_xr10(h[2] >> 6);
+		t[1] = sweet_xr10(h[1] >> 6);
+		t[2] = sweet_xr10(h[0] >> 6);
+		t[3] = sweet_xr10(h[3] >> 6);
+		if (t[3] < 0.0f) t[3] = 0.0f;
+		if (t[3] > 1.0f) t[3] = 1.0f;
+		if (fmt == 553) {
+			t[0] = sweet_srgb_decode(t[0]);
+			t[1] = sweet_srgb_decode(t[1]);
+			t[2] = sweet_srgb_decode(t[2]);
+		}
 		break;
 	}
 	case 554: case 555: {
-		/* BGR10_XR: B/G/R occupy bits 0..9/10..19/20..29.
-		 * The upper two bits are padding, not an alpha channel. */
+		/* BGR10_XR stores B/G/R in bits 0..9/10..19/20..29. */
 		unsigned int raw = *(const unsigned int *)p;
 		t[0] = sweet_xr10((raw >> 20) & 0x3ff);
 		t[1] = sweet_xr10((raw >> 10) & 0x3ff);
 		t[2] = sweet_xr10(raw & 0x3ff);
 		t[3] = 1.0f;
+		if (fmt == 555) {
+			t[0] = sweet_srgb_decode(t[0]);
+			t[1] = sweet_srgb_decode(t[1]);
+			t[2] = sweet_srgb_decode(t[2]);
+		}
 		break;
 	}
 	case 105: {
