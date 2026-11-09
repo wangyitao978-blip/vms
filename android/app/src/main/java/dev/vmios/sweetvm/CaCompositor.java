@@ -211,6 +211,10 @@ final class CaCompositor {
             return;
         }
         Surface s = surfaces.get(id);
+        if (s != null && s.total == total && pageIndex != 0
+                && s.pageShift != shift) {
+            return;
+        }
         if (s == null || s.total != total || pageIndex == 0) {
             s = new Surface();
             s.id = id;
@@ -236,8 +240,11 @@ final class CaCompositor {
                 return;
             }
             int slot = pageIndex + i;
-            if (pa != 0 && s.pages[slot] == 0) {
+            long previous = s.pages[slot];
+            if (previous == 0 && pa != 0) {
                 s.received++;
+            } else if (previous != 0 && pa == 0) {
+                s.received--;
             }
             s.pages[slot] = pa;
         }
