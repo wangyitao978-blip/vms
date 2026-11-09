@@ -204,7 +204,9 @@ final class CaCompositor {
         }
         int pageSize = 1 << shift;
         long maxPages = (ram.length + pageSize - 1L) / pageSize;
-        if (total > maxPages || b.limit() < 40L + (long) pageCount * 8L) {
+        long allocPages = alloc > 0 ? (alloc - 1L) / pageSize + 1L : maxPages;
+        if (total > maxPages || total > allocPages
+                || b.limit() < 40L + (long) pageCount * 8L) {
             if (rejectLogs < 8) {
                 rejectLogs++;
                 Log.w(TAG, "map reject id=" + id + " pages=" + total
