@@ -675,11 +675,19 @@ sweet_surface_fill(SweetSurfaceMapping *mapping, unsigned int rgba)
 	if (mapping->base == 0) {
 		return;
 	}
+	unsigned char red = (unsigned char)(rgba & 0xff);
+	unsigned char green = (unsigned char)((rgba >> 8) & 0xff);
+	unsigned char blue = (unsigned char)((rgba >> 16) & 0xff);
+	unsigned char alpha = (unsigned char)(rgba >> 24);
+	int bgra = mapping->pixel_format == 0x42475241u; /* 'BGRA' */
 	for (unsigned long y = 0; y < mapping->height; y++) {
-		unsigned int *row = (unsigned int *)(mapping->base +
-		    y * mapping->bytes_per_row);
+		unsigned char *row = mapping->base + y * mapping->bytes_per_row;
 		for (unsigned long x = 0; x < mapping->width; x++) {
-			row[x] = rgba;
+			unsigned char *p = row + x * 4;
+			p[0] = bgra ? blue : red;
+			p[1] = green;
+			p[2] = bgra ? red : blue;
+			p[3] = alpha;
 		}
 	}
 }
@@ -2863,9 +2871,9 @@ typedef struct {
 	enc_stage = 0;
 	if (surface != 0 && sweet_surface_map(surface, &enc_map) == 0) {
 		dprintf(console_fd,
-		    "SWEETMETAL: mapped dest=%u %lux%lu bpr=%lu base=%p", surface,
+		    "SWEETMETAL: mapped dest=%u %lux%lu bpr=%lu fmt=0x%x base=%p", surface,
 		    enc_map.width, enc_map.height, enc_map.bytes_per_row,
-		    enc_map.base);
+		    enc_map.pixel_format, enc_map.base);
 		dprintf(console_fd, "%c", 10);
 	}
 	return self;
@@ -3513,16 +3521,30 @@ sweet_texture_surface(id texture)
 		unsigned char *src = sweet_stage_base;
 		unsigned char *dst = enc_map.base;
 		unsigned long span = sweet_stage_w * 4;
+		/* The staging IOSurface is BGRA. Convert only when the actual CA
+		 * drawable advertises RGBA; never assume both IOSurfaces match. */
+		int dst_rgba = enc_map.pixel_format == 0x52474241u; /* 'RGBA' */
 		unsigned long long copy_t0 = mach_absolute_time();
 		for (unsigned long y = 0; y < sweet_stage_h; y++) {
-			memcpy(dst + y * enc_map.bytes_per_row,
-			    src + y * sweet_stage_bpr, span);
+			unsigned char *srow = src + y * sweet_stage_bpr;
+			unsigned char *drow = dst + y * enc_map.bytes_per_row;
+			if (!dst_rgba) {
+				memcpy(drow, srow, span);
+			} else {
+				for (unsigned long x = 0; x < sweet_stage_w; x++) {
+					unsigned long o = x * 4;
+					drow[o] = srow[o + 2];
+					drow[o + 1] = srow[o + 1];
+					drow[o + 2] = srow[o];
+					drow[o + 3] = srow[o + 3];
+				}
+			}
 		}
 		if (sweet_stage_logs < 8) {
 			sweet_stage_logs++;
 			dprintf(console_fd,
-			    "SWEETMETAL: stage copy %lux%lu ms=%.1f%c",
-			    sweet_stage_w, sweet_stage_h,
+			    "SWEETMETAL: stage copy %lux%lu dstfmt=0x%x swap_rb=%d ms=%.1f%c",
+			    sweet_stage_w, sweet_stage_h, enc_map.pixel_format, dst_rgba,
 			    sweet_ticks_ms(mach_absolute_time() - copy_t0), 10);
 		}
 	}
