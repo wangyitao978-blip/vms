@@ -552,7 +552,15 @@ final class CaCompositor {
             if (texels <= 0) {
                 return;
             }
-            long pa = s.pages[page] - GuestRam.BASE + within;
+            if (s.pages[page] == 0) {
+                return;
+            }
+            // IOSurface page-table entries are absolute guest physical
+            // addresses. GuestRam.at/index subtract BASE exactly once.
+            long pa = s.pages[page] + within;
+            if (!ram.containsRange(pa, bytesPerTexel)) {
+                return;
+            }
             ByteBuffer buf = ram.at(pa);
             int index = ram.index(pa);
             for (int i = 0; i < texels; i++, index += bytesPerTexel) {
