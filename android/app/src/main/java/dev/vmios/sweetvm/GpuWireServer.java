@@ -90,7 +90,14 @@ public final class GpuWireServer {
         pinRasterThread("0f");
         ClearRenderer gpu = null;
         try {
-            gpu = new ClearRenderer();
+            try {
+                gpu = new ClearRenderer();
+            } catch (Exception e) {
+                // EGL is only used by the standalone clear/draw diagnostic.
+                // CA draw batches use the CPU/native compositor and must keep
+                // flowing even on devices where EGL pbuffer setup is unavailable.
+                Log.e(TAG, "EGL diagnostic renderer unavailable; keeping wire server alive", e);
+            }
             while (true) {
                 try (Socket socket = server.accept()) {
                     socket.setTcpNoDelay(true);
@@ -179,7 +186,12 @@ public final class GpuWireServer {
                 return;
             }
             long start = System.nanoTime();
-            int clears = gpu.clear(operation == OP_CLEAR);
+            int clears = 0;
+            if (gpu != null) {
+                clears = gpu.clear(operation == OP_CLEAR);
+            } else {
+                Log.w(TAG, "diagnostic op=" + operation + " unavailable: EGL renderer not initialized");
+            }
             long end = System.nanoTime();
             Log.i(TAG, "op=" + operation + " request=" + request + " clears=" + clears
                     + " gpu_ns=" + (end - start));
