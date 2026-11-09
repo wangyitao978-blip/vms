@@ -656,10 +656,20 @@ public final class MainActivity extends Activity {
         }
         cmd = ensureQemuArgs(cmd);
         cmd = enableTouch(cmd);
-        if (cfg.mttcg && !cmd.contains("tcgmulti=1")) {
-            // VmEngine turns this into -accel tcg,thread=multi and adds
-            // the 2 s ticket/spin lock timeouts that keep XNU from panicking.
-            cmd = (cmd + " tcgmulti=1").trim();
+        if (cfg.mttcg) {
+            // The checkbox promises two real vCPUs, so enforce cpus=2 as well
+            // as MTTCG. Previously it only added tcgmulti=1; payloads carrying
+            // cpus=1 therefore still launched a single-vCPU guest.
+            java.util.regex.Matcher cpu = java.util.regex.Pattern
+                    .compile("(^|\\\\s)cpus=\\\\d+").matcher(cmd);
+            if (cpu.find()) {
+                cmd = cpu.replaceAll("$1cpus=2");
+            } else {
+                cmd = (cmd + " cpus=2").trim();
+            }
+            if (!cmd.contains("tcgmulti=1")) {
+                cmd = (cmd + " tcgmulti=1").trim();
+            }
         }
         return truncateCmdline(cmd);
     }
@@ -953,7 +963,7 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(150)));
         box.addView(gap(14));
         android.widget.CheckBox mttcgBox = new android.widget.CheckBox(this);
-        mttcgBox.setText("多线程 TCG（试验：2 个 vCPU 真并行，更快但可能 panic）");
+        mttcgBox.setText("多线程 TCG（启用 2 个 vCPU 真并行；实验功能）");
         mttcgBox.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         mttcgBox.setTextColor(TEXT);
         mttcgBox.setChecked(cfg.mttcg);
