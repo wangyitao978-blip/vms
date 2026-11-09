@@ -186,7 +186,7 @@ final class CaCompositor {
     /* ---- wire messages -------------------------------------------------- */
 
     void onMap(ByteBuffer b) {
-        if (disabled()) {
+        if (disabled() || b.limit() < 40) {
             return;
         }
         int id = b.getInt(0);
@@ -195,7 +195,7 @@ final class CaCompositor {
         int total = b.getInt(12);
         int shift = b.getInt(32);
         long alloc = (b.getInt(16) & 0xffffffffL) | ((long) b.getInt(20) << 32);
-        if (b.limit() < 40 || shift < 12 || shift > 20 || pageCount <= 0 || total <= 0
+        if (shift < 12 || shift > 20 || pageCount <= 0 || total <= 0
                 || pageIndex < 0 || pageCount > total || pageIndex > total - pageCount) {
             return;
         }
@@ -243,11 +243,15 @@ final class CaCompositor {
         }
         if (mapLogs < 8) {
             mapLogs++;
+            StringBuilder sample = new StringBuilder();
+            int samples = Math.min(pageCount, 3);
+            for (int i = 0; i < samples; i++) {
+                sample.append(i == 0 ? "" : " ")
+                        .append("p").append(i).append("=0x")
+                        .append(Long.toHexString(b.getLong(40 + i * 8)));
+            }
             Log.i(TAG, "map id=" + id + " pages=" + total + " alloc=" + alloc
-                    + " batch=" + pageIndex + "+" + pageCount + " first=0x"
-                    + Long.toHexString(b.getLong(40)) + " p1=0x"
-                    + Long.toHexString(b.getLong(48)) + " p2=0x"
-                    + Long.toHexString(b.getLong(56)));
+                    + " batch=" + pageIndex + "+" + pageCount + " " + sample);
         }
         if (s.received >= s.total && !s.validated && mapValidated < 8) {
             s.validated = true;
