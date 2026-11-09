@@ -199,7 +199,8 @@ public final class VmEngine {
                 + " prealloc=" + prealloc
                 + " present=" + (offload ? "native" : "guest")
                 + " gpu_wire=" + gpuWire
-                + " capture=" + this.fps + "fps");
+                + " capture=" + this.fps + "fps"
++ " capture_mode=continuous-diagnostic");
         // A large TB cache matters for the multi-hundred-MB dyld shared cache.
         cmd.add("-accel");
         cmd.add(mttcg ? "tcg,thread=multi,tb-size=512" : "tcg,thread=single,tb-size=512");
@@ -412,7 +413,8 @@ public final class VmEngine {
                         newFrame = sequence != lastSequence;
                         lastSequence = sequence;
                     } else {
-                        newFrame = changed(map, probe, lastProbe, haveLast);
+                        // Diagnostic mode: capture every scheduled tick. The sparse probe can miss localized writes.
+                        newFrame = true;
                     }
                     if (map != null && v != null && newFrame) {
                         if (!sequenceMode) {
