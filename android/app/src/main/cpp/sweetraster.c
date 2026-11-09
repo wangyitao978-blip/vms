@@ -362,9 +362,21 @@ Java_dev_vmios_sweetvm_CaCompositor_nativeTriangle(JNIEnv *env, jclass cls,
     if (g_ram == NULL || jpages == NULL || jverts == NULL) {
         return 0;
     }
+    if (total <= 0 || page_shift < 12 || page_shift > 20 ||
+        dst_bpr <= 0 || clip_x1 <= clip_x0 || clip_y1 <= clip_y0 ||
+        (*env)->GetArrayLength(env, jverts) < 24) {
+        return 0;
+    }
     jint page_len = (*env)->GetArrayLength(env, jpages);
     if (page_len < total) {
         return 0;
+    }
+    if (textured) {
+        if (jtex == NULL || tex_w <= 0 || tex_h <= 0 ||
+            (int64_t)tex_w * (int64_t)tex_h >
+                (*env)->GetArrayLength(env, jtex)) {
+            return 0;
+        }
     }
     jlong *pages = (*env)->GetLongArrayElements(env, jpages, NULL);
     jfloat *v = (*env)->GetFloatArrayElements(env, jverts, NULL);
@@ -372,9 +384,10 @@ Java_dev_vmios_sweetvm_CaCompositor_nativeTriangle(JNIEnv *env, jclass cls,
     if (jtex != NULL && textured) {
         tex = (*env)->GetIntArrayElements(env, jtex, NULL);
     }
-    if (pages == NULL || v == NULL) {
+    if (pages == NULL || v == NULL || (textured && tex == NULL)) {
         if (pages) (*env)->ReleaseLongArrayElements(env, jpages, pages, JNI_ABORT);
         if (v) (*env)->ReleaseFloatArrayElements(env, jverts, v, JNI_ABORT);
+        if (tex) (*env)->ReleaseIntArrayElements(env, jtex, tex, JNI_ABORT);
         return 0;
     }
 
