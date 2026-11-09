@@ -292,9 +292,9 @@ raster_band(const RasterCtx *c, int y0, int y1, long *out_covered)
                     }
                     uint32_t dp;
                     memcpy(&dp, base + (size_t)i * 4, sizeof(dp));
-                    float dr = (dp & 0xff) / 255.0f;
+                    float dr = ((dp >> 16) & 0xff) / 255.0f;
                     float dg = ((dp >> 8) & 0xff) / 255.0f;
-                    float db = ((dp >> 16) & 0xff) / 255.0f;
+                    float db = (dp & 0xff) / 255.0f;
                     float da = ((dp >> 24) & 0xff) / 255.0f;
                     float inv_a = 1.0f - col_a;
                     float orr = col_r + dr * inv_a;
