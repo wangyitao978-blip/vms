@@ -3186,11 +3186,11 @@ sweet_texture_surface(id texture)
 			r.tex_bpr = ((unsigned long (*)(id, SEL))objc_msgSend)(enc_tex[i],
 			    sel_registerName("bytesPerRow"));
 			r.tex_surface = sid;
-			/* Uploaded pixels keep their declared format; IOSurface memory
-			 * this process renders into, and offscreen targets it has
-			 * rendered, are RGBA8 whatever the format says. */
-			r.tex_internal = src_mapped ? 1 : 0;
-			if (!r.tex_internal && ((BOOL (*)(id, SEL, Class))objc_msgSend)(
+			/* IOSurface-backed textures use their declared native pixel
+			 * format. Only heap-backed SweetTexture render targets written
+			 * by this plugin use the private internal RGBA8 byte layout. */
+			r.tex_internal = 0;
+			if (!src_mapped && ((BOOL (*)(id, SEL, Class))objc_msgSend)(
 			    enc_tex[i], sel_registerName("isKindOfClass:"),
 			    objc_getClass("SweetTexture"))) {
 				r.tex_internal = ((unsigned long (*)(id, SEL))objc_msgSend)(
