@@ -156,7 +156,9 @@ jobs:
             --disable-libvduse --disable-virtfs --enable-pie
           ninja qemu-system-aarch64
           file qemu-system-aarch64
-          ./qemu-system-aarch64 --version
+          "$CROSS_WRAPPERS/../android-cross/llvm-readelf" -h qemu-system-aarch64 2>/dev/null || "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h qemu-system-aarch64
+          "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h qemu-system-aarch64 | grep -E "Class:.*ELF64|Machine:.*AArch64"
+          echo "QEMU Android ARM64 binary verified (not executed on x86_64 runner)."
 
       - name: Stage freshly built QEMU and Termux libraries into APK assets
         working-directory: .
