@@ -393,6 +393,12 @@ Java_dev_vmios_sweetvm_CaCompositor_nativeTriangle(JNIEnv *env, jclass cls,
 
     long covered = 0;
     do {
+        for (int i = 0; i < 24; i++) {
+            if (!isfinite(v[i])) {
+                covered = 0;
+                goto done;
+            }
+        }
         float ax = v[0], ay = v[1], au = v[2], av = v[3];
         float ar = v[4], ag = v[5], ab = v[6], aa = v[7];
         float bx = v[8], by = v[9], bu = v[10], bv = v[11];
@@ -458,7 +464,7 @@ Java_dev_vmios_sweetvm_CaCompositor_nativeTriangle(JNIEnv *env, jclass cls,
         c.br = br; c.bg = bg; c.bb = bb; c.ba = ba;
         c.cr = cr; c.cg = cg; c.cb = cb; c.ca = ca;
         c.sr = sr; c.sg = sg; c.sb = sb; c.sa = sa;
-        c.opaque_solid = solid && sa >= 0.999f;
+        c.opaque_solid = solid && sa >= 1.0f;
         if (c.opaque_solid) {
             /* Match Java's integer truncation in the fallback rasterizer. */
             int ri = (int)(sr * 255.0f);
@@ -503,6 +509,7 @@ Java_dev_vmios_sweetvm_CaCompositor_nativeTriangle(JNIEnv *env, jclass cls,
         }
     } while (0);
 
+done:
     (*env)->ReleaseLongArrayElements(env, jpages, pages, JNI_ABORT);
     (*env)->ReleaseFloatArrayElements(env, jverts, v, JNI_ABORT);
     if (tex != NULL) {
