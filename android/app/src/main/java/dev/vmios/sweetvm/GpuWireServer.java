@@ -36,16 +36,10 @@ public final class GpuWireServer {
     private static final int FORMAT_R32F = 55;
     private static final int PIXEL_BYTES = WIDTH * HEIGHT * 4;
 
-    /* Guest panel: ADT framebuffer at guest PA 0x9c000000, QEMU RAM at 0x40000000. */
     private static final long RAM_PA = 0x40000000L;
-    private static final long PANEL_PA = 0x9c000000L;
-    private static final long PANEL_OFF = PANEL_PA - RAM_PA;
-    private static final int PANEL_BPR = 1080 * 4;
-    private static final int PANEL_WIDTH = 1080;
 
     private static GpuWireServer instance;
     private static File guestRam;
-    private static boolean panelStarted;
     private static int wireLogs;
     private static int dumpLogs;
 
@@ -189,10 +183,6 @@ public final class GpuWireServer {
             long end = System.nanoTime();
             Log.i(TAG, "op=" + operation + " request=" + request + " clears=" + clears
                     + " gpu_ns=" + (end - start));
-            if (guestRam != null) {
-                startPanelBlit(gpu);
-            }
-
             ByteBuffer reply = ByteBuffer.allocate(16 + 32 + PIXEL_BYTES)
                     .order(ByteOrder.LITTLE_ENDIAN);
             reply.putInt(MAGIC);
@@ -229,18 +219,10 @@ public final class GpuWireServer {
         return compositor;
     }
 
-    private static RandomAccessFile panelFile;
-
-    private static synchronized RandomAccessFile panelFile() throws Exception {
-        if (panelFile == null) {
-            panelFile = new RandomAccessFile(guestRam, "rw");
-        }
-        return panelFile;
-    }
-
     /*
-     * OP_FILL: paint a rectangle of a guest IOSurface (the render pass clear
-     * the plugin asked for) directly in the guest's RAM.
+     * OP_FILL: paint a rectangle of a guest IOSurface into guest RAM.
+     * Validate the complete rectangle before writing: malformed guest
+     * coordinates must never escape the mapped RAM file or cross a row.
      */
     private static void fillSurface(byte[] payload, int request) {
         if (payload.length < 32 || guestRam == null) {
@@ -254,24 +236,47 @@ public final class GpuWireServer {
         int color = b.getInt(20);
         int x = b.getInt(24);
         int y = b.getInt(28);
-        long off = pa - RAM_PA;
-        if (off < 0 || width <= 0 || height <= 0 || stride < width * 4) {
-            Log.w(TAG, "fill rejected pa=0x" + Long.toHexString(pa) + " " + width
-                    + "x" + height + " stride=" + stride);
+        if (pa < RAM_PA || width <= 0 || height <= 0 || stride <= 0
+                || x < 0 || y < 0) {
+            Log.w(TAG, "fill rejected pa=0x" + Long.toHexString(pa) + " "
+                    + width + "x" + height + " stride=" + stride + " x=" + x + " y=" + y);
             return;
         }
-        byte[] row = new byte[width * 4];
+
+        long rowBytes = (long) width * 4L;
+        long xBytes = (long) x * 4L;
+        long first;
+        long end;
+        try {
+            if (rowBytes > stride || xBytes > stride - rowBytes) {
+                throw new ArithmeticException("rectangle exceeds row stride");
+            }
+            long off = Math.subtractExact(pa, RAM_PA);
+            first = Math.addExact(off,
+                    Math.addExact(Math.multiplyExact((long) y, (long) stride), xBytes));
+            end = Math.addExact(first,
+                    Math.addExact(Math.multiplyExact((long) height - 1L, (long) stride),
+                            rowBytes));
+        } catch (ArithmeticException e) {
+            Log.w(TAG, "fill rejected: invalid rectangle bounds");
+            return;
+        }
+        if (end > guestRam.length()) {
+            Log.w(TAG, "fill rejected: end=0x" + Long.toHexString(end)
+                    + " ram=0x" + Long.toHexString(guestRam.length()));
+            return;
+        }
+
+        byte[] row = new byte[(int) rowBytes];
         for (int i = 0; i < width; i++) {
             row[i * 4] = (byte) (color >> 16);
             row[i * 4 + 1] = (byte) (color >> 8);
             row[i * 4 + 2] = (byte) color;
             row[i * 4 + 3] = (byte) 0xff;
         }
-        try {
-            RandomAccessFile f = panelFile();
-            long base = off + (long) y * stride + (long) x * 4;
+        try (RandomAccessFile f = new RandomAccessFile(guestRam, "rw")) {
             for (int yy = 0; yy < height; yy++) {
-                f.seek(base + (long) yy * stride);
+                f.seek(first + (long) yy * stride);
                 f.write(row);
             }
             Log.i(TAG, "fill request=" + request + " pa=0x" + Long.toHexString(pa)
@@ -279,50 +284,6 @@ public final class GpuWireServer {
         } catch (Exception e) {
             Log.w(TAG, "fill failed", e);
         }
-    }
-
-    /*
-     * End-to-end check of the host GPU path: take the colour the GL clear
-     * produced, then paint a moving square straight into the guest panel
-     * surface through the shared RAM file. The guest is expected to show it
-     * on screen once the kernel console stops drawing.
-     */
-    private static void startPanelBlit(ClearRenderer gpu) {
-        synchronized (GpuWireServer.class) {
-            if (panelStarted || guestRam == null) {
-                return;
-            }
-            panelStarted = true;
-        }
-        final int color = gpu.pixel(1f, 0f, 0f);
-        final int white = gpu.pixel(1f, 1f, 1f);
-        Thread t = new Thread(() -> {
-            Log.i(TAG, "panel blit color=#" + Integer.toHexString(color)
-                    + " off=0x" + Long.toHexString(PANEL_OFF));
-            final int y0 = 300, rows = 480, bar = 48;
-            byte[] row = new byte[PANEL_WIDTH * 4];
-            try (RandomAccessFile f = new RandomAccessFile(guestRam, "rw")) {
-                for (int i = 0; i < 600; i++) {
-                    int barX = (i * 9) % (PANEL_WIDTH - bar);
-                    for (int px = 0; px < PANEL_WIDTH; px++) {
-                        int c = (px >= barX && px < barX + bar) ? white : color;
-                        row[px * 4] = (byte) (c >> 16);	/* R */
-                        row[px * 4 + 1] = (byte) (c >> 8);	/* G */
-                        row[px * 4 + 2] = (byte) c;	/* B */
-                        row[px * 4 + 3] = (byte) 0xff;
-                    }
-                    for (int yy = 0; yy < rows; yy++) {
-                        f.seek(PANEL_OFF + (long) (y0 + yy) * PANEL_BPR);
-                        f.write(row);
-                    }
-                    Thread.sleep(250);
-                }
-            } catch (Exception e) {
-                Log.w(TAG, "panel blit failed", e);
-            }
-        }, "sweetgpu-panel");
-        t.setDaemon(true);
-        t.start();
     }
 
     private static final class ClearRenderer {
@@ -363,20 +324,6 @@ public final class GpuWireServer {
             }
             Log.i(TAG, "EGL " + version[0] + "." + version[1] + " "
                     + GLES20.glGetString(GLES20.GL_RENDERER));
-        }
-
-        int pixel(float red, float green, float blue) {
-            GLES20.glViewport(0, 0, WIDTH, HEIGHT);
-            GLES20.glClearColor(red, green, blue, 1f);
-            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-            GLES20.glFinish();
-            ByteBuffer px = ByteBuffer.allocateDirect(4).order(ByteOrder.LITTLE_ENDIAN);
-            GLES20.glReadPixels(0, 0, 1, 1, GLES20.GL_RGBA,
-                    GLES20.GL_UNSIGNED_BYTE, px);
-            int r = px.get(0) & 0xff;
-            int g = px.get(1) & 0xff;
-            int b = px.get(2) & 0xff;
-            return (0xff << 24) | (r << 16) | (g << 8) | b;
         }
 
         int clear(boolean on) {
