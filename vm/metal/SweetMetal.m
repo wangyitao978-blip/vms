@@ -3573,11 +3573,11 @@ struct SweetBlockHeader {
 	int host_complete = sweet_ca_flush();
 	[self flushFills];
 	if (host_complete) {
-		if ([self sweet_presentDrawables] == 0) {
+		if ([self sweet_presentDrawables:1] == 0) {
 			sweet_present_pending();
 		}
 	} else {
-		(void)[self sweet_presentDrawables];
+		(void)[self sweet_presentDrawables:0];
 		sweet_last_surface = 0;
 	}
 }
