@@ -3481,7 +3481,7 @@ sweet_texture_surface(id texture)
 - (id)blitCommandEncoder;
 - (id)computeCommandEncoder;
 - (void)flushFills;
-- (int)sweet_presentDrawables;
+- (int)sweet_presentDrawables:(int)shouldPresent;
 @end
 
 /* arm64 block ABI: the invoke pointer is the fourth word. Calling it
@@ -3558,11 +3558,11 @@ struct SweetBlockHeader {
 	int host_complete = sweet_ca_flush();
 	[self flushFills];
 	if (host_complete) {
-		if ([self sweet_presentDrawables] == 0) {
+		if ([self sweet_presentDrawables:1] == 0) {
 			sweet_present_pending();
 		}
 	} else {
-		(void)[self sweet_presentDrawables];
+		(void)[self sweet_presentDrawables:0];
 		sweet_last_surface = 0;
 	}
 }
@@ -3601,7 +3601,7 @@ struct SweetBlockHeader {
 	    ((id (*)(id, SEL))objc_msgSend)(drawable, sel_registerName("retain"));
 }
 
-- (int)sweet_presentDrawables
+- (int)sweet_presentDrawables:(int)shouldPresent
 {
 	int presented = 0;
 	for (int i = 0; i < pending_drawable_count; i++) {
@@ -3609,11 +3609,12 @@ struct SweetBlockHeader {
 		pending_drawables[i] = 0;
 		if (drawable != 0) {
 			SEL present = sel_registerName("present");
-			if (((BOOL (*)(id, SEL, SEL))objc_msgSend)(drawable,
+			if (shouldPresent &&
+			    ((BOOL (*)(id, SEL, SEL))objc_msgSend)(drawable,
 			    sel_registerName("respondsToSelector:"), present)) {
 				((void (*)(id, SEL))objc_msgSend)(drawable, present);
 				presented++;
-			} else {
+			} else if (shouldPresent) {
 				dprintf(console_fd,
 				    "SWEETMETAL: drawable %s has no present selector%c",
 				    object_getClassName(drawable), 10);
