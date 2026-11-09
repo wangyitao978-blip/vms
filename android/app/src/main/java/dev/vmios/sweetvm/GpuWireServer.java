@@ -254,6 +254,8 @@ public final class GpuWireServer {
         int x = b.getInt(24);
         int y = b.getInt(28);
         if (pa < RAM_PA || width <= 0 || height <= 0 || stride <= 0
+                || width > 8192 || height > 8192
+                || (long) width * height > 4_000_000L
                 || x < 0 || y < 0) {
             Log.w(TAG, "fill rejected pa=0x" + Long.toHexString(pa) + " "
                     + width + "x" + height + " stride=" + stride + " x=" + x + " y=" + y);
