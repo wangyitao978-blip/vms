@@ -15,7 +15,8 @@ OBJECT_DECLARE_SIMPLE_TYPE(SweetFBState, SWEET_FB)
 #define SWEET_FB_MAGIC           0x31424653u
 #define SWEET_FB_MAX_DESCRIPTORS ((SWEET_FB_COMMAND_SIZE - SWEET_FB_HEADER_SIZE) / SWEET_FB_DESCRIPTOR_SIZE)
 #define SWEET_FB_MAX_COPY        16384u
-#define SWEET_FB_FRAME_SIZE      (1080u * 2400u * 4u)
+#define SWEET_FB_DEFAULT_FRAME_SIZE (1080u * 2400u * 4u)
+#define SWEET_FB_MAX_FRAME_SIZE     0x01000000u
 
 struct SweetFBState {
     SysBusDevice parent_obj;
@@ -23,6 +24,7 @@ struct SweetFBState {
     uint64_t mmio_base;
     uint64_t frame_base;
     uint64_t command_base;
+    uint64_t frame_size;
     uint32_t completed;
     uint32_t status;
 };
@@ -88,8 +90,8 @@ static void sweet_fb_present(SweetFBState *s, uint32_t sequence)
         uint32_t length = sweet_fb_get32(d + 12);
 
         if (!length || length > SWEET_FB_MAX_COPY ||
-            destination > SWEET_FB_FRAME_SIZE ||
-            length > SWEET_FB_FRAME_SIZE - destination) {
+            destination > s->frame_size ||
+            length > s->frame_size - destination) {
             ok = false;
             break;
         }
@@ -149,6 +151,11 @@ static void sweet_fb_realize(DeviceState *dev, Error **errp)
     SweetFBState *s = SWEET_FB(dev);
     SysBusDevice *sbd = SYS_BUS_DEVICE(dev);
 
+    if (s->frame_size == 0 || s->frame_size > SWEET_FB_MAX_FRAME_SIZE) {
+        error_setg(errp, "sweet-fb frame-size must be between 1 and 16 MiB");
+        return;
+    }
+
     memory_region_init_io(&s->mmio, OBJECT(s), &sweet_fb_ops, s,
                           "sweet-fb", SWEET_FB_MMIO_SIZE);
     sysbus_init_mmio(sbd, &s->mmio);
@@ -159,6 +166,8 @@ static Property sweet_fb_props[] = {
     DEFINE_PROP_UINT64("mmio-base", SweetFBState, mmio_base, 0x0f000000),
     DEFINE_PROP_UINT64("frame-base", SweetFBState, frame_base, 0x9c000000),
     DEFINE_PROP_UINT64("command-base", SweetFBState, command_base, 0x9d000000),
+    DEFINE_PROP_UINT64("frame-size", SweetFBState, frame_size,
+                       SWEET_FB_DEFAULT_FRAME_SIZE),
     DEFINE_PROP_END_OF_LIST(),
 };
 
