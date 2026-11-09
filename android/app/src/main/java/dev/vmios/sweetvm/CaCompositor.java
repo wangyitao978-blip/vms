@@ -556,13 +556,16 @@ final class CaCompositor {
                 return cached;
             }
         }
+        boolean internal = (flags & F_INTERNAL) != 0;
+        int bytesPerTexel = internal ? 4 : bpp(fmt);
+        long minimumRow = (long) width * bytesPerTexel;
         if (width <= 0 || height <= 0 || bpr <= 0 || width > 8192 || height > 8192
-                || (long) width * height > 4_000_000L) {
+                || (long) width * height > 4_000_000L || minimumRow > bpr
+                || (long) bpr * height > (2L << 30)) {
             return null;
         }
         int[] out = new int[width * height];
         int uploadGeneration = 0;
-        boolean internal = (flags & F_INTERNAL) != 0;
         if ((flags & F_UPLOAD_TEX) != 0) {
             Upload u = uploads.get(id);
             if (u == null || !u.ready) {
@@ -576,10 +579,10 @@ final class CaCompositor {
             }
         } else {
             Surface s = surfaces.get(id);
-            if (s == null || !s.ready()) {
+            if (s == null || !s.ready()
+                    || (s.alloc > 0 && (long) bpr * height > s.alloc)) {
                 return null;
             }
-            int bytesPerTexel = internal ? 4 : bpp(fmt);
             for (int y = 0; y < height; y++) {
                 decodeSurfaceRow(s, (long) y * bpr, width, bytesPerTexel, fmt,
                         internal, out, y * width);
