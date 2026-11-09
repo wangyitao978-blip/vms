@@ -5,24 +5,24 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
 
 import java.nio.ByteBuffer;
 
-/** Draws the 1080x2400 guest panel, letterboxed, from a double buffer. */
+/** Draws the guest framebuffer 1:1 in physical display pixels, centered. */
 public final class FramebufferView extends View {
     private final Object lock = new Object();
     private Bitmap front;
     private Bitmap back;
     private boolean hasFrame;
-    private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
-    private final RectF dst = new RectF();
+    private boolean touchActive;
+    // No filtering: one guest framebuffer pixel maps to one Android canvas pixel.
+    private final Paint paint = new Paint(0);
 
     public interface TouchListener {
-        /** type: 0 up, 1 down, 2 move; x/y in the 1080x2400 guest panel. */
+        /** type: 0 up, 1 down, 2 move; x/y are native guest framebuffer pixels. */
         void onGuestTouch(int type, int x, int y);
     }
 
@@ -32,41 +32,59 @@ public final class FramebufferView extends View {
         touchListener = l;
     }
 
+    private int imageLeft() {
+        return (getWidth() - Payload.FB_W) / 2;
+    }
+
+    private int imageTop() {
+        return (getHeight() - Payload.FB_H) / 2;
+    }
+
+    private boolean insideImage(float x, float y) {
+        return x >= imageLeft() && y >= imageTop()
+                && x < imageLeft() + Payload.FB_W
+                && y < imageTop() + Payload.FB_H;
+    }
+
+    private int clampX(float x) {
+        return Math.max(0, Math.min(Payload.FB_W - 1, (int) x));
+    }
+
+    private int clampY(float y) {
+        return Math.max(0, Math.min(Payload.FB_H - 1, (int) y));
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent e) {
-        int w = getWidth();
-        int h = getHeight();
-        if (w == 0 || h == 0) {
-            return true;
-        }
-        float scale = Math.min((float) w / Payload.FB_W, (float) h / Payload.FB_H);
-        float left = (w - Payload.FB_W * scale) / 2f;
-        float top = (h - Payload.FB_H * scale) / 2f;
-        float gx = (e.getX() - left) / scale;
-        float gy = (e.getY() - top) / scale;
-        if (gx < 0 || gy < 0 || gx >= Payload.FB_W || gy >= Payload.FB_H) {
-            return true;
-        }
-        int type;
-        switch (e.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN:
-                type = 1;
-                break;
-            case MotionEvent.ACTION_MOVE:
-                type = 2;
-                break;
-            case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_CANCEL:
-                type = 0;
-                break;
-            default:
+        float x = e.getX() - imageLeft();
+        float y = e.getY() - imageTop();
+        int action = e.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            if (!insideImage(e.getX(), e.getY())) {
+                touchActive = false;
                 return true;
+            }
+            touchActive = true;
+            sendTouch(1, clampX(x), clampY(y));
+            return true;
         }
-        TouchListener l = touchListener;
-        if (l != null) {
-            l.onGuestTouch(type, (int) gx, (int) gy);
+        if (!touchActive) {
+            return true;
+        }
+        if (action == MotionEvent.ACTION_MOVE) {
+            sendTouch(2, clampX(x), clampY(y));
+        } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            sendTouch(0, clampX(x), clampY(y));
+            touchActive = false;
         }
         return true;
+    }
+
+    private void sendTouch(int type, int x, int y) {
+        TouchListener l = touchListener;
+        if (l != null) {
+            l.onGuestTouch(type, x, y);
+        }
     }
 
     public FramebufferView(Context c) {
@@ -105,20 +123,16 @@ public final class FramebufferView extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        int w = getWidth();
-        int h = getHeight();
         canvas.drawColor(Color.BLACK);
         synchronized (lock) {
             if (front == null) {
                 return;
             }
-            float scale = Math.min((float) w / Payload.FB_W, (float) h / Payload.FB_H);
-            float dw = Payload.FB_W * scale;
-            float dh = Payload.FB_H * scale;
-            float left = (w - dw) / 2f;
-            float top = (h - dh) / 2f;
-            dst.set(left, top, left + dw, top + dh);
-            canvas.drawBitmap(front, null, dst, paint);
+            float left = imageLeft();
+            float top = imageTop();
+            // Draw without a destination rectangle so Android cannot rescale
+            // or interpolate the guest pixels.
+            canvas.drawBitmap(front, left, top, paint);
         }
     }
 }
