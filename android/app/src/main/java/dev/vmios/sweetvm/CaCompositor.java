@@ -684,11 +684,10 @@ final class CaCompositor {
             case 70: case 71: case 72: case 73: case 74:
             case 80: case 81:
             case 90: case 91: case 92: case 93:
-            case 550: case 551: case 554: case 555:
+            case 550: case 551: case 552: case 553: case 554: case 555:
                 return 4;
             case 103: case 104: case 105:
             case 110: case 111: case 112: case 113: case 114: case 115:
-            case 552: case 553:
                 return 8;
             case 123: case 124: case 125:
                 return 16;
@@ -793,39 +792,25 @@ final class CaCompositor {
                 return pack(r, g, bl, a);
             }
             case 550:
-            case 551: {
-                int raw = b.getInt(i);
-                float r = xr10(raw & 0x3ff);
-                float g = xr10((raw >> 10) & 0x3ff);
-                float bl = xr10((raw >> 20) & 0x3ff);
-                return pack(r, g, bl, 1f);
-            }
-            /*
-             * The 554/555 wire formats are the alpha-bearing packed 10-bit
-             * variants used by the IOSurface compositor.  They share the
-             * little-endian R10:G10:B10 layout of 550/551, with the top two
-             * bits carrying A2.  Falling through to the BGRA8 default turns
-             * full-screen XR surfaces into the red/black bands seen on the
-             * device.
-             */
+            case 551:
             case 554:
             case 555: {
+                // BGR10_XR: low bits are B, then G, then R; no alpha channel.
                 int raw = b.getInt(i);
-                float r = xr10(raw & 0x3ff);
+                float bl = xr10(raw & 0x3ff);
                 float g = xr10((raw >> 10) & 0x3ff);
-                float bl = xr10((raw >> 20) & 0x3ff);
-                float a = ((raw >>> 30) & 0x3) / 3f;
-                return pack(r, g, bl, a);
+                float r = xr10((raw >> 20) & 0x3ff);
+                return pack(r, g, bl, 1f);
             }
             case 552:
             case 553: {
-                float r = xr16(b.getShort(i) & 0xffff);
-                float g = xr16(b.getShort(i + 2) & 0xffff);
-                float bl = xr16(b.getShort(i + 4) & 0xffff);
-                int a = (b.getShort(i + 6) & 0xffff) / 257;
-                return (a << 24) | ((int) Math.min(255, Math.max(0, r * 255f)) << 16)
-                        | ((int) Math.min(255, Math.max(0, g * 255f)) << 8)
-                        | (int) Math.min(255, Math.max(0, bl * 255f));
+                // BGRA10_XR: same packed 10-bit color with two alpha bits.
+                int raw = b.getInt(i);
+                float bl = xr10(raw & 0x3ff);
+                float g = xr10((raw >> 10) & 0x3ff);
+                float r = xr10((raw >> 20) & 0x3ff);
+                float a = ((raw >>> 30) & 0x3) / 3f;
+                return pack(r, g, bl, a);
             }
             case 105: {
                 float r = b.getFloat(i);
