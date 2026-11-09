@@ -3552,7 +3552,6 @@ struct SweetBlockHeader {
 - (void)commit
 {
 	sweet_log("buffer", "commit");
-	sweet_ca_flush();
 	int host_complete = sweet_ca_flush();
 	[self flushFills];
 	if (host_complete) {
