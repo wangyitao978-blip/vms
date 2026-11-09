@@ -2542,9 +2542,10 @@ sweet_blend_pixel(SweetRaster *r, int x, int y, const float col[4])
 	}
 	if (a > 1.0f) a = 1.0f;
 	float sr = col[0] * a, sg = col[1] * a, sb = col[2] * a;
-	float dr = (float)p[0] / 255.0f;
+	/* IOSurface and the staging target are BGRA8: byte 2 is red. */
+	float dr = (float)p[2] / 255.0f;
 	float dg = (float)p[1] / 255.0f;
-	float db = (float)p[2] / 255.0f;
+	float db = (float)p[0] / 255.0f;
 	float da = (float)p[3] / 255.0f;
 	float inv = 1.0f - a;
 	float orr = sr + dr * inv;
@@ -2563,9 +2564,9 @@ sweet_blend_pixel(SweetRaster *r, int x, int y, const float col[4])
 		ob = sb * l4 + db * (1.0f - a * l4);
 		oa = a * l4 + da * (1.0f - a * l4);
 	}
-	p[0] = (unsigned char)(orr > 1.0f ? 255.0f : orr * 255.0f);
+	p[0] = (unsigned char)(ob > 1.0f ? 255.0f : ob * 255.0f);
 	p[1] = (unsigned char)(og > 1.0f ? 255.0f : og * 255.0f);
-	p[2] = (unsigned char)(ob > 1.0f ? 255.0f : ob * 255.0f);
+	p[2] = (unsigned char)(orr > 1.0f ? 255.0f : orr * 255.0f);
 	p[3] = (unsigned char)(oa > 1.0f ? 255.0f : oa * 255.0f);
 }
 
