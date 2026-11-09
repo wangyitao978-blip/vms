@@ -36,6 +36,8 @@ public final class GpuWireServer {
     private static final int FORMAT_R32F = 55;
     private static final int PIXEL_BYTES = WIDTH * HEIGHT * 4;
 
+    private static final long RAM_PA = 0x40000000L;
+
     private static GpuWireServer instance;
     private static File guestRam;
     private static int wireLogs;
