@@ -347,7 +347,7 @@ public final class VmEngine {
         monitor.setDaemon(true);
         monitor.start();
 
-        startReader(guestRam, payload, listener, offload);
+        startReader(guestRam, payload, listener, offload, continuousCapture);
         if (cpus >= 2) {
             final File qs = qmpSocket;
             Thread probe = new Thread(() -> {
@@ -395,7 +395,8 @@ public final class VmEngine {
         return diff;
     }
 
-    private void startReader(File guestRam, Payload payload, Listener listener, boolean offload) {
+    private void startReader(File guestRam, Payload payload, Listener listener, boolean offload,
+                              boolean continuousCapture) {
         reader = new Thread(() -> {
             FileChannel ch = null;
             MappedByteBuffer map = null;
