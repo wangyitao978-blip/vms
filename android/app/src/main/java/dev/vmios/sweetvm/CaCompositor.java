@@ -171,6 +171,7 @@ final class CaCompositor {
         int height;
         int bpr;
         int gen;
+        boolean[] receivedChunks;
         boolean ready;
     }
 
@@ -194,8 +195,19 @@ final class CaCompositor {
         int total = b.getInt(12);
         int shift = b.getInt(32);
         long alloc = (b.getInt(16) & 0xffffffffL) | ((long) b.getInt(20) << 32);
-        if (shift < 12 || shift > 20 || pageCount <= 0 || total <= 0
-                || pageIndex < 0 || pageIndex + pageCount > total) {
+        if (b.limit() < 40 || shift < 12 || shift > 20 || pageCount <= 0 || total <= 0
+                || pageIndex < 0 || pageCount > total || pageIndex > total - pageCount) {
+            return;
+        }
+        int pageSize = 1 << shift;
+        long maxPages = (ram.length + pageSize - 1L) / pageSize;
+        if (total > maxPages || b.limit() < 40L + (long) pageCount * 8L) {
+            if (rejectLogs < 8) {
+                rejectLogs++;
+                Log.w(TAG, "map reject id=" + id + " pages=" + total
+                        + " batch=" + pageIndex + "+" + pageCount
+                        + " bytes=" + b.limit());
+            }
             return;
         }
         Surface s = surfaces.get(id);
@@ -223,10 +235,11 @@ final class CaCompositor {
                 }
                 return;
             }
-            if (s.pages[pageIndex + i] == 0) {
+            int slot = pageIndex + i;
+            if (pa != 0 && s.pages[slot] == 0) {
                 s.received++;
             }
-            s.pages[pageIndex + i] = pa;
+            s.pages[slot] = pa;
         }
         if (mapLogs < 8) {
             mapLogs++;
@@ -262,6 +275,9 @@ final class CaCompositor {
     }
 
     void onTexture(ByteBuffer b) {
+        if (b.limit() < HEADER_BYTES) {
+            return;
+        }
         int id = b.getInt(20);
         int width = b.getInt(24);
         int height = b.getInt(28);
@@ -275,9 +291,15 @@ final class CaCompositor {
         if (bytes <= 0) {
             return;
         }
+        int bytesPerTexel = bpp(fmt);
+        long minimumRow = (long) width * bytesPerTexel;
+        long minimumData = (long) bpr * height;
+        int expectedChunks = total > 0 ? (total + UPLOAD_CHUNK - 1) / UPLOAD_CHUNK : 0;
         if (total <= 0 || total > (2 << 20) || chunks <= 0 || chunk < 0
-                || chunk >= chunks || width <= 0 || height <= 0 || width > 8192
-                || height > 8192 || bpr <= 0 || bpr > (1 << 20)) {
+                || chunk >= chunks || chunks != expectedChunks
+                || width <= 0 || height <= 0 || width > 8192 || height > 8192
+                || bpr <= 0 || bpr > (1 << 20) || minimumRow > bpr
+                || minimumData > total) {
             if (rejectLogs < 8) {
                 rejectLogs++;
                 Log.w(TAG, "texture reject id=" + id + " " + width + "x" + height
@@ -297,17 +319,27 @@ final class CaCompositor {
             u.bpr = bpr;
             u.texFmt = fmt;
             u.gen = ++uploadGen;
+            u.receivedChunks = new boolean[chunks];
             u.ready = false;
             uploads.put(id, u);
             decoded.remove(id);
         }
-        int at = chunk * UPLOAD_CHUNK;
-        int copy = Math.min(bytes, total - at);
-        if (copy <= 0) {
+        if (u.width != width || u.height != height || u.bpr != bpr
+                || u.texFmt != fmt || u.receivedChunks == null
+                || u.receivedChunks.length != chunks) {
             return;
         }
-        System.arraycopy(b.array(), b.arrayOffset() + offset, u.data, at, copy);
-        u.got += copy;
+        int at = chunk * UPLOAD_CHUNK;
+        int expectedBytes = Math.min(UPLOAD_CHUNK, total - at);
+        if (at < 0 || expectedBytes <= 0 || bytes != expectedBytes
+                || u.receivedChunks[chunk]) {
+            return;
+        }
+        ByteBuffer src = b.duplicate();
+        src.position(offset);
+        src.get(u.data, at, expectedBytes);
+        u.receivedChunks[chunk] = true;
+        u.got += expectedBytes;
         if (u.got >= u.expect) {
             u.ready = true;
             if (uploadLogs < 8) {
@@ -379,6 +411,13 @@ final class CaCompositor {
         if (disabled()) {
             return;
         }
+        if (payload.length < HEADER_BYTES) {
+            if (rejectLogs < 8) {
+                rejectLogs++;
+                Log.w(TAG, "draw reject: short payload=" + payload.length);
+            }
+            return;
+        }
         ByteBuffer b = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN);
         int flags = b.getInt(0);
         if ((flags & F_TEX_CHUNK) != 0) {
@@ -408,6 +447,11 @@ final class CaCompositor {
                     + " tris=" + triCount + " b80=" + b.getInt(80));
         }
 
+        if (triCount < 0 || triCount > (payload.length - HEADER_BYTES)
+                / (3 * VERTEX_BYTES)) {
+            dropped++;
+            return;
+        }
         Surface dst = surfaces.get(dstId);
         if (dst == null || !dst.ready()) {
             dropped++;
@@ -416,7 +460,10 @@ final class CaCompositor {
         dst.width = dstW;
         dst.height = dstH;
         dst.bpr = dstBpr;
-        if (dstBpr < dstW * 4 || (dst.alloc > 0 && (long) dstBpr * dstH > dst.alloc)) {
+        if (dstW <= 0 || dstH <= 0 || dstW > 8192 || dstH > 8192
+                || dstBpr <= 0 || dstBpr > (1 << 20)
+                || (long) dstBpr < (long) dstW * 4L
+                || (dst.alloc > 0 && (long) dstBpr * dstH > dst.alloc)) {
             dropped++;
             return;
         }
