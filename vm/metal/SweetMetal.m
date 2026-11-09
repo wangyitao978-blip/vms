@@ -2790,7 +2790,7 @@ typedef struct {
 	id enc_tex[8];
 	id enc_ib;
 	unsigned long enc_iboff;
-	unsigned char enc_vbytes[8][256];
+	unsigned char enc_vbytes[8][4096];
 	unsigned long enc_vblen[8];
 	unsigned char enc_fbytes[8][256];
 	unsigned long enc_fblen[8];
@@ -2948,7 +2948,7 @@ typedef struct {
     atIndex:(unsigned long)index
 {
 	if (index < 8 && bytes != 0) {
-		unsigned long n = length < 256 ? length : 256;
+		unsigned long n = length < 4096 ? length : 4096;
 		memcpy(enc_vbytes[index], bytes, n);
 		enc_vblen[index] = n;
 		dprintf(console_fd, "SWEETMETAL: vbytes[%lu] len=%lu", index, length);
