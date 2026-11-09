@@ -45,6 +45,12 @@
 +			w = bw;
 +			h = bh;
 +		}
++		/* Reject absurd coordinates before any signed clipping arithmetic. */
++		if (bx < -(int32_t)s->width || by < -(int32_t)s->height ||
++		    dx < -(int32_t)fWidth || dy < -(int32_t)fHeight) {
++			s->release();
++			continue;
++		}
 +		if (bx < 0 || by < 0) {
 +			dx -= bx;
 +			dy -= by;
@@ -73,13 +79,27 @@
 +		if (h > (int32_t)fHeight - dy) {
 +			h = (int32_t)fHeight - dy;
 +		}
-+		uint64_t last = (uint64_t)s->offset + (uint64_t)(by + h - 1) * s->bytesPerRow +
-+		    (uint64_t)(bx + w) * 4;
-+		if (w <= 0 || h <= 0 || s->elementWidth != 1 || s->elementHeight != 1 ||
-+		    s->memory == NULL || last > s->memory->getLength()) {
-+			src = 0;
++		if (w <= 0 || h <= 0 || bx < 0 || by < 0 || dx < 0 || dy < 0 ||
++		    s->elementWidth != 1 || s->elementHeight != 1 ||
++		    s->memory == NULL || bpe != 4 || fPixels == NULL) {
++			s->release();
++			continue;
 +		}
-+		if (src != 0 && bpe == 4) {
++		uint64_t src_x_end = (uint64_t)bx + (uint64_t)w;
++		uint64_t src_y_end = (uint64_t)by + (uint64_t)h;
++		uint64_t dst_x_end = (uint64_t)dx + (uint64_t)w;
++		uint64_t dst_y_end = (uint64_t)dy + (uint64_t)h;
++		uint64_t row_bytes = src_x_end * 4u;
++		uint64_t last = (uint64_t)s->offset +
++		    (src_y_end - 1u) * (uint64_t)s->bytesPerRow + row_bytes;
++		if (src_y_end > s->height || row_bytes > s->bytesPerRow ||
++		    dst_x_end > fWidth || dst_y_end > fHeight ||
++		    (uint64_t)fWidth * 4u > fRowBytes ||
++		    last > s->memory->getLength()) {
++			s->release();
++			continue;
++		}
++		if (src != 0) {
 +			for (int32_t y = 0; y < h; y++) {
 +				memcpy((void *)(fPixels + (uint64_t)(dy + y) * fRowBytes + (uint64_t)dx * 4),
 +				    (const void *)(src + s->offset + (uint64_t)(by + y) * s->bytesPerRow + (uint64_t)bx * 4),
