@@ -724,10 +724,6 @@ final class CaCompositor {
         return raw * (2.003921568627451f / 1023.0f) - 0.7529411764705882f;
     }
 
-    private static float xr16(int raw) {
-        return raw * (2.003921568627451f / 65535.0f) - 0.7529411764705882f;
-    }
-
     private static int decode(ByteBuffer b, int i, int fmt, boolean internal) {
         if (internal) {
             int p = b.getInt(i);
