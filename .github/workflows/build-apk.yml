@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, fix/render-channel-xr-decoding ]
+    branches: [ main, fix/render-channel-xr-decoding, fix/system-ui-red-blue-channel ]
   workflow_dispatch:
 
 permissions:
