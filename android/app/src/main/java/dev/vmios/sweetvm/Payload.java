@@ -30,8 +30,8 @@ public final class Payload {
     private static final int CMDLINE_LEN = 608;
 
     public static void configure(String cmdline) {
-        FB_W = 1080;
-        FB_H = 2400;
+        FB_W = 1125;
+        FB_H = 2436;
         java.util.regex.Matcher w = java.util.regex.Pattern
                 .compile("(?:^| )sweetfb_w=(\\d+)").matcher(cmdline);
         java.util.regex.Matcher h = java.util.regex.Pattern
