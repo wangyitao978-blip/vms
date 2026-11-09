@@ -155,6 +155,7 @@ jobs:
             --disable-vhost-vdpa --disable-vhost-net --disable-vhost-kernel \
             --disable-libvduse --disable-virtfs --enable-pie
           ninja qemu-system-aarch64
+          # This is an Android ARM64 binary; inspect its ELF header instead of executing it on the x86_64 runner.
           file qemu-system-aarch64
           "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h qemu-system-aarch64
           "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h qemu-system-aarch64 | grep -E "Class:.*ELF64|Machine:.*AArch64"
