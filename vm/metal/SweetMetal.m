@@ -3337,6 +3337,10 @@ sweet_texture_surface(id texture)
 					    index_type, tex_id, tex_flags);
 					if (submitted > 0) {
 						sweet_ca_submitted++;
+					} else if (submitted < 0) {
+						/* Some chunks reached the host, but the batch is incomplete.
+						 * Do not present this partially rendered frame. */
+						sweet_ca_frame_failed = 1;
 					}
 				}
 				/* 0 means no host packet was accepted, so local rendering is
@@ -3426,7 +3430,8 @@ sweet_texture_surface(id texture)
 	if (!host_complete) {
 		sweet_ca_frame_failed = 1;
 	}
-	if (host_complete && enc_stage && sweet_stage_id != 0 && enc_map.base != 0 &&
+	if (host_complete && !sweet_ca_frame_failed && enc_stage &&
+	    sweet_stage_id != 0 && enc_map.base != 0 &&
 	    enc_map.width == sweet_stage_w && enc_map.height == sweet_stage_h) {
 		/*
 		 * The window server presents this drawable itself; our own
