@@ -990,6 +990,7 @@ sweet_ca_upload(unsigned int identifier, unsigned int format,
 	unsigned long chunks = (size + SWEET_CA_UPLOAD_BYTES - 1) /
 	    SWEET_CA_UPLOAD_BYTES;
 	unsigned char message[4000];
+	unsigned long sent_chunks = 0;
 	for (unsigned long chunk = 0; chunk < chunks; chunk++) {
 		unsigned long offset = chunk * SWEET_CA_UPLOAD_BYTES;
 		unsigned long bytes = size - offset;
@@ -2700,7 +2701,7 @@ sweet_ca_batch(const SweetRaster *r, unsigned int dst_id,
 				float c[4];
 				if (!sweet_vertex(r, index, &v[k].x, &v[k].y,
 				    &v[k].u, &v[k].v, c)) {
-					return 0;
+					return sent_chunks != 0 ? -1 : 0;
 				}
 				v[k].r = c[0];
 				v[k].g = c[1];
@@ -2721,8 +2722,9 @@ sweet_ca_batch(const SweetRaster *r, unsigned int dst_id,
 			out += sizeof(v);
 		}
 		if (sweet_ca_send(message, (unsigned long)(out - message)) != 0) {
-			return 0;
+			return sent_chunks != 0 ? -1 : 0;
 		}
+		sent_chunks++;
 	}
 	return 1;
 }
@@ -3327,11 +3329,14 @@ sweet_texture_surface(id texture)
 				if (host_ok) {
 					submitted = sweet_ca_batch(&r, host_surface, ip, n,
 					    index_type, tex_id, tex_flags);
-					if (submitted) {
+					if (submitted > 0) {
 						sweet_ca_submitted++;
 					}
 				}
-				if (!submitted) {
+				/* 0 means no host packet was accepted, so local rendering is
+				 * safe. -1 means earlier chunks were already queued: rendering
+				 * the whole batch locally would blend those triangles twice. */
+				if (submitted == 0) {
 					sweet_ca_local++;
 					for (unsigned long k = 0; k + 2 < n; k += 3) {
 						unsigned long a, b, c;
