@@ -448,7 +448,9 @@ index 5488156..9f5d84d 100644
 +			status = kIOReturnNotResponding;
 +			for (unsigned tries = 0; tries < 4; tries++) {
 +				unsigned got = 0;
-+				IOReturn reply = completeWithin(0, &got, 250);
++				/* Host CA rasterization is CPU-bound today; a 250 ms wait
+                 * expires before a full frame's draw batches finish. */
+                IOReturn reply = completeWithin(0, &got, 5000);
 +				if (reply != kIOReturnSuccess) {
 +					break;
 +				}
