@@ -21,6 +21,7 @@ on:
       - "tools/mkadt.py"
       - "tools/mkpayload.py"
       - "tools/bootargs.py"
+      - ".github/workflows/build-vmios-full-gpu-payload.yml"
 
 permissions:
   actions: read
