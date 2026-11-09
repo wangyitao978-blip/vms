@@ -125,8 +125,15 @@ jobs:
         working-directory: .
         run: |
           set -euo pipefail
-          git clone --depth 1 --branch v8.2.0 https://github.com/qemu/qemu.git qemu
-          git -C qemu rev-parse HEAD | tee /tmp/qemu-source-revision.txt
+          EXPECTED_QEMU_COMMIT="$(awk -F': ' '/Exact source commit:/ {print $2}' vm/qemu/UPSTREAM.lock)"
+          test "${#EXPECTED_QEMU_COMMIT}" -eq 40
+          git init qemu
+          git -C qemu remote add origin https://github.com/qemu/qemu.git
+          git -C qemu fetch --depth 1 origin "$EXPECTED_QEMU_COMMIT"
+          git -C qemu checkout --detach FETCH_HEAD
+          ACTUAL_QEMU_COMMIT="$(git -C qemu rev-parse HEAD)"
+          test "$ACTUAL_QEMU_COMMIT" = "$EXPECTED_QEMU_COMMIT"
+          printf '%s\n' "$ACTUAL_QEMU_COMMIT" | tee /tmp/qemu-source-revision.txt
           cp vm/qemu/sweet_ufs.c vm/qemu/sweet_touch.c vm/qemu/sweet_fb.c qemu/hw/block/
           git -C qemu apply "$GITHUB_WORKSPACE/vm/qemu/qemu-sweet.patch"
           mkdir qemu/build-android
