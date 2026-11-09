@@ -3310,7 +3310,7 @@ sweet_texture_surface(id texture)
 		    (r.tex != 0 && (r.tex_w == 0 || r.tex_h == 0 ||
 		     r.tex_w > 8192 || r.tex_h > 8192 ||
 		     r.tex_bpr == 0 || r.tex_bpr > (1u << 20) ||
-		     r.tex_w * r.tex_h > 4000000ul))) {
+		     r.tex_w * r.tex_h > 4000000ul)))) {
 			/* Keep unsupported dimensions on the guest's local raster path. */
 			host_ok = 0;
 		}
