@@ -3110,7 +3110,7 @@ sweet_texture_surface(id texture)
 		unsigned long vbuf = ((unsigned long (*)(id, SEL, unsigned long))
 		    objc_msgSend)(enc_pipeline,
 		    sel_registerName("attributeBuffer:"), 0);
-		if (vbuf >= 8 || enc_vb[vbuf] == 0) {
+		if (vbuf >= 8 || (enc_vb[vbuf] == 0 && enc_vblen[vbuf] == 0)) {
 			vbuf = 1;
 		}
 		unsigned long stride = ((unsigned long (*)(id, SEL, unsigned long))
@@ -3175,6 +3175,10 @@ sweet_texture_surface(id texture)
 				r.vb = (const unsigned char *)vc + vo;
 				r.vb_len = vl - vo;
 			}
+		} else if (enc_vblen[vbuf] != 0) {
+			/* setVertexBytes is an inline vertex buffer binding. */
+			r.vb = enc_vbytes[vbuf];
+			r.vb_len = enc_vblen[vbuf];
 		}
 		for (unsigned int i = 0; i < 8 && r.tex == 0; i++) {
 			if (enc_tex[i] == 0 || enc_tex[i] == enc_target_tex) {
