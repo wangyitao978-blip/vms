@@ -990,7 +990,6 @@ sweet_ca_upload(unsigned int identifier, unsigned int format,
 	unsigned long chunks = (size + SWEET_CA_UPLOAD_BYTES - 1) /
 	    SWEET_CA_UPLOAD_BYTES;
 	unsigned char message[4000];
-	unsigned long sent_chunks = 0;
 	for (unsigned long chunk = 0; chunk < chunks; chunk++) {
 		unsigned long offset = chunk * SWEET_CA_UPLOAD_BYTES;
 		unsigned long bytes = size - offset;
@@ -2652,6 +2651,7 @@ sweet_ca_batch(const SweetRaster *r, unsigned int dst_id,
 	unsigned long triangles = count / 3;
 	unsigned long chunks = (triangles + SWEET_CA_TRIS_PER_CHUNK - 1) /
 	    SWEET_CA_TRIS_PER_CHUNK;
+	unsigned long sent_chunks = 0;
 	/* Reject the batch before anything reaches the wire if any index is
 	 * outside the vertex buffer. */
 	for (unsigned long k = 0; k < triangles * 3; k++) {
