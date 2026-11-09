@@ -3299,8 +3299,14 @@ sweet_texture_surface(id texture)
 				tex_flags |= SWEET_CA_F_INTERNAL;
 			}
 		}
-		if (host_ok && (r.tex_w > 65535 || r.tex_h > 65535 ||
-		    r.dst_w > 65535 || r.dst_h > 65535)) {
+		if (host_ok && (r.dst_w == 0 || r.dst_h == 0 ||
+		    r.dst_w > 8192 || r.dst_h > 8192 ||
+		    r.dst_bpr == 0 || r.dst_bpr > (1u << 20) ||
+		    (r.tex != 0 && (r.tex_w == 0 || r.tex_h == 0 ||
+		     r.tex_w > 8192 || r.tex_h > 8192 ||
+		     r.tex_bpr == 0 || r.tex_bpr > (1u << 20) ||
+		     r.tex_w * r.tex_h > 4000000ul))) {
+			/* Keep unsupported dimensions on the guest's local raster path. */
 			host_ok = 0;
 		}
 		if (host_ok && !sweet_ca_map(host_surface)) {
