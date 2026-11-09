@@ -397,6 +397,9 @@ public final class VmEngine {
             boolean haveLast = false;
             int lastSequence = -1;
             int seqLogs = 0;
+            long nextFbProbe = System.nanoTime();
+            int lastFbHash = 0;
+            int fbProbeLogs = 0;
             try {
                 while (running) {
                     ticks++;
@@ -431,6 +434,18 @@ public final class VmEngine {
                         frames++;
                     }
                     long now = System.nanoTime();
+                    if (!sequenceMode && map != null && now >= nextFbProbe) {
+                        int hash = framebufferHash(map);
+                        if (fbProbeLogs < 12 || hash != lastFbHash) {
+                            android.util.Log.i("sweetvm", "fb-content hash="
+                                    + Integer.toHexString(hash)
+                                    + " changed=" + (fbProbeLogs == 0 || hash != lastFbHash)
+                                    + " frame=" + frames);
+                            fbProbeLogs++;
+                        }
+                        lastFbHash = hash;
+                        nextFbProbe = now + 1_000_000_000L;
+                    }
                     if (next > now) {
                         java.util.concurrent.locks.LockSupport.parkNanos(next - now);
                     } else {
@@ -452,6 +467,18 @@ public final class VmEngine {
         }, "sweetvm-fb");
         reader.setDaemon(true);
         reader.start();
+    }
+
+    // Hash every pixel in the mapped panel once per second. This distinguishes
+    // a live Android capture loop from actual writes by the guest into its FB.
+    private static int framebufferHash(MappedByteBuffer map) {
+        int hash = 0x811c9dc5;
+        int limit = Payload.FB_STRIDE * Payload.FB_H;
+        for (int offset = 0; offset < limit; offset += 4) {
+            hash ^= map.getInt(offset);
+            hash *= 0x01000193;
+        }
+        return hash;
     }
 
     private void stopReader() {
