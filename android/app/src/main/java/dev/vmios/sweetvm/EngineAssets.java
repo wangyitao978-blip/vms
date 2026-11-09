@@ -67,7 +67,7 @@ public final class EngineAssets {
      */
     public static String currentVersion(Context ctx) throws IOException {
         String abi = supportedAbi();
-        String assetPath = "engine/" + abi + "/.vmios-engine-version";
+        String assetPath = "engine/" + abi + "/vmios-engine-version";
         try (InputStream in = ctx.getAssets().open(assetPath)) {
             byte[] b = new byte[128];
             int n = in.read(b);
