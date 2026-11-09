@@ -2284,9 +2284,8 @@ typedef struct {
 
 /*
  * MTLPixelFormat storage sizes. CoreAnimation binds RG8Unorm (30) for its
- * two-channel gradients, R16Float (25) for LUTs and the private wide-gamut
- * BGR10_XR (550/551, 32bpp) / BGRA10_XR (552/553, 64bpp) formats; assuming
- * four bytes per texel shifts every row and skews sampled gradients.
+ * two-channel gradients, R16Float (25) for LUTs, and packed 32-bit XR
+ * formats: BGRA10_XR (552/553) and BGR10_XR (554/555).
  */
 static unsigned long
 sweet_texel_bpp(unsigned long fmt)
@@ -2303,11 +2302,10 @@ sweet_texel_bpp(unsigned long fmt)
 	case 70: case 71: case 72: case 73: case 74:
 	case 80: case 81:
 	case 90: case 91: case 92: case 93:
-	case 550: case 551: case 554: case 555:
+	case 550: case 551: case 552: case 553: case 554: case 555:
 		return 4;
 	case 103: case 104: case 105:
 	case 110: case 111: case 112: case 113: case 114: case 115:
-	case 552: case 553:
 		return 8;
 	case 123: case 124: case 125:
 		return 16;
@@ -2321,12 +2319,6 @@ static float
 sweet_xr10(unsigned long raw)
 {
 	return (float)raw * (2.003921568627451f / 1023.0f) - 0.7529411764705882f;
-}
-
-static float
-sweet_xr16(unsigned long raw)
-{
-	return (float)raw * (2.003921568627451f / 65535.0f) - 0.7529411764705882f;
 }
 
 static void
@@ -2386,7 +2378,8 @@ sweet_decode_texel(unsigned long fmt, const unsigned char *p, float t[4])
 		t[3] = sweet_half_to_float(h[3]);
 		break;
 	}
-	case 550: case 551: {
+	case 550: case 551: case 554: case 555: {
+		/* BGR10_XR: low bits are B, then G, then R; alpha is opaque. */
 		unsigned int raw = *(const unsigned int *)p;
 		unsigned int b = raw & 0x3ff;
 		unsigned int g = (raw >> 10) & 0x3ff;
@@ -2394,14 +2387,19 @@ sweet_decode_texel(unsigned long fmt, const unsigned char *p, float t[4])
 		t[0] = sweet_xr10(r);
 		t[1] = sweet_xr10(g);
 		t[2] = sweet_xr10(b);
+		t[3] = 1.0f;
 		break;
 	}
 	case 552: case 553: {
-		const unsigned short *h = (const unsigned short *)p;
-		t[0] = sweet_xr16(h[0]);
-		t[1] = sweet_xr16(h[1]);
-		t[2] = sweet_xr16(h[2]);
-		t[3] = (float)h[3] / 65535.0f;
+		/* BGRA10_XR adds two alpha bits to the packed XR color. */
+		unsigned int raw = *(const unsigned int *)p;
+		unsigned int b = raw & 0x3ff;
+		unsigned int g = (raw >> 10) & 0x3ff;
+		unsigned int r = (raw >> 20) & 0x3ff;
+		t[0] = sweet_xr10(r);
+		t[1] = sweet_xr10(g);
+		t[2] = sweet_xr10(b);
+		t[3] = (float)((raw >> 30) & 0x3) / 3.0f;
 		break;
 	}
 	case 105: {
