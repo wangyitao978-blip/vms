@@ -3555,7 +3555,7 @@ struct SweetBlockHeader {
 		return;
 	}
 	completed_handlers[completed_count++] =
-	    ((id (*)(id, SEL))objc_msgSend)(handler, sel_registerName("retain"));
+	    ((id (*)(id, SEL))objc_msgSend)(handler, sel_registerName("copy"));
 }
 
 - (void)addScheduledHandler:(id)handler
@@ -3576,7 +3576,7 @@ struct SweetBlockHeader {
 		return;
 	}
 	scheduled_handlers[scheduled_count++] =
-	    ((id (*)(id, SEL))objc_msgSend)(handler, sel_registerName("retain"));
+	    ((id (*)(id, SEL))objc_msgSend)(handler, sel_registerName("copy"));
 }
 
 - (unsigned long)status
