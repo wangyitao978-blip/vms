@@ -10,7 +10,7 @@ on:
   workflow_run:
     workflows: ["xnu"]
     types: [completed]
-    branches: [main]
+    branches: [main, fix/gpu-wire-remove-panel-diagnostic]
   push:
     branches: [main]
     paths:
@@ -21,6 +21,7 @@ on:
       - "tools/mkadt.py"
       - "tools/mkpayload.py"
       - "tools/bootargs.py"
+      - ".github/workflows/build-vmios-full-gpu-payload.yml"
 
 permissions:
   actions: read
@@ -37,7 +38,7 @@ jobs:
       - name: Download the successful XNU kernel with its SMC PSCI conduit
         env:
           GH_TOKEN: ${{ github.token }}
-          XNU_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.xnu_run_id || '42502970659' }}
+          XNU_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.xnu_run_id || '42613199421' }}
         run: |
           set -euo pipefail
           gh run download "$XNU_RUN_ID" \
