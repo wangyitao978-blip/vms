@@ -22,8 +22,8 @@ public final class Payload {
     public static final long RAM_BASE = 0x40000000L;
     public static final long STUB_PA = 0x40200000L;
     public static final long FB_BASE = 0x9c000000L;
-    public static int FB_W = 1080;
-    public static int FB_H = 2400;
+    public static int FB_W = 1125;
+    public static int FB_H = 2436;
     public static int FB_STRIDE = FB_W * 4;
     public static final int PAGE = 0x4000;
 
