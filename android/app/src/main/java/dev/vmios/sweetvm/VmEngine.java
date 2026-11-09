@@ -426,7 +426,10 @@ public final class VmEngine {
                             android.util.Log.i("sweetvm", "offload completed="
                                     + sequence + " status=" + status);
                         }
-                        newFrame = sequence != lastSequence;
+                        // sweet-fb reports sequence=0/status!=0 on a
+                        // failed or partial DMA present. Never copy that
+                        // incomplete framebuffer into the Android view.
+                        newFrame = sequence != 0 && sequence != lastSequence && status == 0;
                         lastSequence = sequence;
                     } else {
                         newFrame = changed(map, probe, lastProbe, haveLast);
