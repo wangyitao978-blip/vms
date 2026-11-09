@@ -578,6 +578,24 @@ sweet_iosurface_symbol(const char *name)
 	    dlsym(sweet_iosurface_library, name) : 0;
 }
 
+/*
+ * IOSurfaceGetPixelFormat returns an OSType FourCC, not an MTLPixelFormat.
+ * Translate the common packed 8-bit formats before using it in the rasterizer;
+ * for other formats retain the texture object's Metal format.
+ */
+static unsigned long
+sweet_iosurface_metal_format(unsigned int fourcc, unsigned long fallback)
+{
+	switch (fourcc) {
+	case 0x42475241u: /* 'BGRA' */
+		return 80; /* MTLPixelFormatBGRA8Unorm */
+	case 0x52474241u: /* 'RGBA' */
+		return 70; /* MTLPixelFormatRGBA8Unorm */
+	default:
+		return fallback;
+	}
+}
+
 static int
 sweet_surface_map(unsigned int identifier, SweetSurfaceMapping *mapping)
 {
@@ -3220,7 +3238,8 @@ sweet_texture_surface(id texture)
 			 * render target: decode its native format and actual row stride.
 			 */
 			if (src_mapped) {
-				r.tex_fmt_px = src_map.pixel_format;
+				r.tex_fmt_px = sweet_iosurface_metal_format(
+				    src_map.pixel_format, r.tex_fmt_px);
 				r.tex_w = src_map.width;
 				r.tex_h = src_map.height;
 				r.tex_bpr = src_map.bytes_per_row;
