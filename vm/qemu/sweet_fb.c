@@ -162,7 +162,7 @@ static void sweet_fb_realize(DeviceState *dev, Error **errp)
         error_setg(errp, "sweet-fb frame-size must be between 1 and 16 MiB");
         return;
     }
-    if ((s->mmio_base & 3u) != 0 ||
+    if ((s->mmio_base & (SWEET_FB_MMIO_SIZE - 1u)) != 0 ||
         s->mmio_base > UINT64_MAX - SWEET_FB_MMIO_SIZE ||
         s->frame_base > UINT64_MAX - s->frame_size ||
         s->command_base > UINT64_MAX - SWEET_FB_COMMAND_SIZE) {
