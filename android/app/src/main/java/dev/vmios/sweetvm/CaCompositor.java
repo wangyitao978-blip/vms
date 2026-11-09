@@ -717,7 +717,7 @@ final class CaCompositor {
              */
             case 552:
             case 553: {
-                /* Ten data bits occupy bits 6..15 of each 16-bit lane. */
+                /* Apple stores ten XR data bits in the high portion of each 16-bit lane. */
                 float bl = xr10((b.getShort(i) & 0xffff) >>> 6);
                 float g = xr10((b.getShort(i + 2) & 0xffff) >>> 6);
                 float r = xr10((b.getShort(i + 4) & 0xffff) >>> 6);
