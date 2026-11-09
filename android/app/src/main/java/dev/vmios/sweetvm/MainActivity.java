@@ -799,8 +799,11 @@ public final class MainActivity extends Activity {
     }
 
     private void showVmScreen() {
-        setVmSystemBars(true);
+        // Keep Android system navigation available; the VM surface has no
+        // in-app overlay controls. Use Android Back to open the stop dialog.
+        setVmSystemBars(false);
         clearRoot();
+
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
         fbView = new FramebufferView(this);
@@ -813,78 +816,10 @@ public final class MainActivity extends Activity {
         root.addView(fbView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        vmHint = new TextView(this);
-        vmHint.setText("正在启动 XNU…\n首次启动可能需要几十分钟");
-        vmHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        vmHint.setTextColor(TEXT);
-        vmHint.setGravity(Gravity.CENTER);
-        vmHint.setPadding(dp(22), dp(18), dp(22), dp(18));
-        vmHint.setBackground(round(0xCC14141B, 18));
-        FrameLayout.LayoutParams hp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        hp.gravity = Gravity.CENTER;
-        root.addView(vmHint, hp);
-
-        vmTop = new LinearLayout(this);
-        vmTop.setOrientation(LinearLayout.HORIZONTAL);
-        vmTop.setGravity(Gravity.CENTER_VERTICAL);
-        vmTop.setPadding(dp(14), statusBarHeight() + dp(8), dp(14), dp(10));
-        vmTop.setBackgroundColor(0xFF08080C);
-        TextView close = text("×", 24, TEXT, false);
-        close.setGravity(Gravity.CENTER);
-        close.setPadding(dp(8), 0, dp(8), 0);
-        close.setOnClickListener(v -> confirmStop());
-        vmTop.addView(close, new LinearLayout.LayoutParams(dp(40), dp(44)));
-        LinearLayout stack = new LinearLayout(this);
-        stack.setOrientation(LinearLayout.VERTICAL);
-        stack.setPadding(dp(6), 0, 0, 0);
-        TextView title = text("vmios", 14, TEXT, true);
-        vmStatus = text("启动中 · 软件 CPU", 10, DIM, false);
-        stack.addView(title);
-        stack.addView(vmStatus);
-        vmTop.addView(stack);
-        View spacer = new View(this);
-        vmTop.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1));
-        TextView stop = text("停止", 12, BAD, true);
-        stop.setPadding(dp(12), dp(8), dp(12), dp(8));
-        stop.setOnClickListener(v -> confirmStop());
-        vmTop.addView(stop);
-        FrameLayout.LayoutParams tp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        tp.gravity = Gravity.TOP;
-        root.addView(vmTop, tp);
-
-        vmPill = new TextView(this);
-        vmPill.setText("00:00 · 等待画面");
-        vmPill.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-        vmPill.setTextColor(TEXT);
-        vmPill.setGravity(Gravity.CENTER);
-        vmPill.setPadding(dp(14), dp(8), dp(14), dp(8));
-        vmPill.setBackground(round(0xF21D1D26, 99));
-        FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        pp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        pp.bottomMargin = navBarHeight() + dp(20);
-        root.addView(vmPill, pp);
-        vmTimer = vmPill;
-
-        TextView controls = text("≡", 20, TEXT, true);
-        controls.setGravity(Gravity.CENTER);
-        controls.setBackground(round(0xCC1D1D26, 99));
-        controls.setOnClickListener(v -> toggleControls());
-        FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(dp(44), dp(44));
-        cp.gravity = Gravity.BOTTOM | Gravity.RIGHT;
-        cp.rightMargin = dp(14);
-        cp.bottomMargin = navBarHeight() + dp(66);
-        root.addView(controls, cp);
-
         vmScreen = root;
         rootView.addView(root, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         engine.setView(fbView);
-        controlsVisible = true;
-        ui.removeCallbacks(hideControls);
-        ui.postDelayed(hideControls, 4500);
     }
 
     private void toggleControls() {
