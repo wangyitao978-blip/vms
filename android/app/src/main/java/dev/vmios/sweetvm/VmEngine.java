@@ -218,6 +218,7 @@ public final class VmEngine {
         // another stalled in userland, so the speed win is not proven yet.
         boolean mttcg = cpus >= 2 && cmdline.contains("tcgmulti=1");
         boolean offload = cmdline.contains("sweetfb_offload=1");
+        boolean continuousCapture = cmdline.contains("sweetfb_continuous=1");
         boolean gpuWire = cmdline.contains("gpu_wire=1");
         android.util.Log.i("sweetvm", "engine cpus=" + cpus + " accel="
                 + (mttcg ? "tcg,thread=multi" : "tcg,thread=single")
@@ -225,7 +226,7 @@ public final class VmEngine {
                 + " present=" + (offload ? "native" : "guest")
                 + " gpu_wire=" + gpuWire
                 + " capture=" + this.fps + "fps"
-+ " capture_mode=continuous-diagnostic");
+                + " capture_mode=" + (continuousCapture ? "continuous-diagnostic" : "change-detected"));
         // A large TB cache matters for the multi-hundred-MB dyld shared cache.
         cmd.add("-accel");
         cmd.add(mttcg ? "tcg,thread=multi,tb-size=512" : "tcg,thread=single,tb-size=512");
@@ -443,7 +444,11 @@ public final class VmEngine {
                         newFrame = sequence != lastSequence;
                         lastSequence = sequence;
                     } else {
-                        newFrame = changed(map, probe, lastProbe, haveLast);
+                        // Optional diagnostic mode: force a framebuffer copy on every
+                        // sampling tick. This measures the host capture/presentation
+                        // path, not the guest rendering FPS. Keep change detection as
+                        // the default because continuous copies add CPU/GPU load.
+                        newFrame = continuousCapture || changed(map, probe, lastProbe, haveLast);
                     }
                     if (map != null && v != null && newFrame) {
                         if (!sequenceMode) {
