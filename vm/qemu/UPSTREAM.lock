@@ -1,0 +1,25 @@
+# QEMU source lock
+
+This project deliberately builds against an immutable upstream QEMU revision.
+Do not replace this revision with a moving tag or branch without an explicit,
+reviewed upgrade.
+
+- Upstream: https://github.com/qemu/qemu
+- Release line: v8.2.0
+- Exact source commit: 1600b9f46b1bd08b00fe86c46ef6dbb48cbe10d6
+- Android target: aarch64-softmmu
+- Android NDK: r27 (27.0.12077973), API 24
+- QEMU build: TCG/MTTCG; OpenGL, KVM and SLIRP disabled
+- Local QEMU integration:
+  - qemu-sweet.patch
+  - sweet_ufs.c
+  - sweet_touch.c
+  - sweet_fb.c
+
+The exact source commit is fetched by .github/workflows/build-apk.yml. The
+workflow verifies HEAD against this lock before applying the local integration.
+The local patch and device sources remain versioned in this repository.
+
+This lock preserves reproducibility and prevents upstream tag movement from
+silently changing our engine. It is not a vendored copy of the complete QEMU
+source tree; the upstream commit remains the canonical source snapshot.
