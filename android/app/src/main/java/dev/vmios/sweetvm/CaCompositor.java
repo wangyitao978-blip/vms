@@ -68,7 +68,15 @@ final class GuestRam {
     }
 
     boolean contains(long pa) {
-        return pa >= BASE && pa - BASE < length;
+        return containsRange(pa, 1);
+    }
+
+    boolean containsRange(long pa, long bytes) {
+        if (pa < BASE || bytes < 0) {
+            return false;
+        }
+        long offset = pa - BASE;
+        return offset <= length && bytes <= length - offset;
     }
 }
 
@@ -206,7 +214,8 @@ final class CaCompositor {
         }
         for (int i = 0; i < pageCount; i++) {
             long pa = (b.getLong(40 + i * 8));
-            if (pa != 0 && (!ram.contains(pa) || (pa & 0x3fff) != 0)) {
+            if (pa != 0 && (!ram.containsRange(pa, s.pageSize)
+                    || (pa & (s.pageSize - 1)) != 0)) {
                 if (rejectLogs < 8) {
                     rejectLogs++;
                     Log.w(TAG, "map reject id=" + id + " page " + (pageIndex + i)
@@ -818,7 +827,12 @@ final class CaCompositor {
                 if (span <= 0) {
                     break;
                 }
-                long pa = dst.pages[page] - GuestRam.BASE + within;
+                // Page-table entries are guest physical addresses. Keep that
+                // address absolute here: GuestRam.at/index subtract BASE once.
+                long pa = dst.pages[page] + within;
+                if (!ram.containsRange(pa, 4)) {
+                    break;
+                }
                 ByteBuffer buf = ram.at(pa);
                 int index = ram.index(pa);
                 for (int i = 0; i < span; i++, x++, index += 4) {
