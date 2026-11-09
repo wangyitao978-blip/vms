@@ -12,7 +12,7 @@ import android.view.View;
 
 import java.nio.ByteBuffer;
 
-/** Draws the 1080x2400 guest panel, letterboxed, from a double buffer. */
+/** Draws the 1125x2436 guest panel, letterboxed, from a double buffer. */
 public final class FramebufferView extends View {
     private final Object lock = new Object();
     private Bitmap front;
@@ -22,7 +22,7 @@ public final class FramebufferView extends View {
     private final RectF dst = new RectF();
 
     public interface TouchListener {
-        /** type: 0 up, 1 down, 2 move; x/y in the 1080x2400 guest panel. */
+        /** type: 0 up, 1 down, 2 move; x/y in the 1125x2436 guest panel. */
         void onGuestTouch(int type, int x, int y);
     }
 
