@@ -171,6 +171,7 @@ final class CaCompositor {
         int height;
         int bpr;
         int gen;
+        boolean internal;
         boolean[] receivedChunks;
         boolean ready;
     }
@@ -302,6 +303,7 @@ final class CaCompositor {
         int height = b.getInt(28);
         int bpr = b.getInt(32);
         int fmt = b.getInt(36);
+        boolean internal = (b.getInt(0) & F_INTERNAL) != 0;
         int chunk = b.getInt(72);
         int chunks = b.getInt(76);
         int total = b.getInt(80);
@@ -310,7 +312,7 @@ final class CaCompositor {
         if (bytes <= 0) {
             return;
         }
-        int bytesPerTexel = bpp(fmt);
+        int bytesPerTexel = internal ? 4 : bpp(fmt);
         long minimumRow = (long) width * bytesPerTexel;
         long minimumData = (long) bpr * height;
         int expectedChunks = total > 0 ? (total + UPLOAD_CHUNK - 1) / UPLOAD_CHUNK : 0;
@@ -337,6 +339,7 @@ final class CaCompositor {
             u.height = height;
             u.bpr = bpr;
             u.texFmt = fmt;
+            u.internal = internal;
             u.gen = ++uploadGen;
             u.receivedChunks = new boolean[chunks];
             u.ready = false;
@@ -344,7 +347,7 @@ final class CaCompositor {
             decoded.remove(id);
         }
         if (u.width != width || u.height != height || u.bpr != bpr
-                || u.texFmt != fmt || u.receivedChunks == null
+                || u.texFmt != fmt || u.internal != internal || u.receivedChunks == null
                 || u.receivedChunks.length != chunks) {
             return;
         }
