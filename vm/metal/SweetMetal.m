@@ -792,6 +792,7 @@ sweet_ca_map(unsigned int identifier)
 	}
 	unsigned int input = identifier;
 	unsigned int output[6];
+	bzero(output, sizeof(output));
 	unsigned long output_size = sizeof(output);
 	int result = IOConnectCallStructMethod(sweet_accel_port, 0x104, &input,
 	    sizeof(input), output, &output_size);
