@@ -47,17 +47,12 @@ public final class FramebufferView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent e) {
-        int w = getWidth();
-        int h = getHeight();
-        if (w == 0 || h == 0) {
+        if (getWidth() == 0 || getHeight() == 0) {
             return true;
         }
-        // The guest image is centered at native pixel size: one Android
-        // canvas pixel maps to one guest framebuffer pixel.
-        int left = (w - Payload.FB_W) / 2;
-        int top = (h - Payload.FB_H) / 2;
-        float gx = e.getX() - left;
-        float gy = e.getY() - top;
+        // The view itself is exactly FB_W x FB_H and centered by its parent.
+        float gx = e.getX();
+        float gy = e.getY();
         if (gx < 0 || gy < 0 || gx >= Payload.FB_W || gy >= Payload.FB_H) {
             return true;
         }
@@ -119,8 +114,6 @@ public final class FramebufferView extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        int w = getWidth();
-        int h = getHeight();
         canvas.drawColor(Color.BLACK);
         synchronized (lock) {
             if (front == null) {
