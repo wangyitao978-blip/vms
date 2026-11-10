@@ -84,10 +84,9 @@ public final class GpuWireServer {
     }
 
     private void serve() {
-        // The guest's four TCG vCPUs own cpu4..cpu7; keep the host raster off
-        // that cluster so CA draws and guest execution stop stealing each
-        // other's cores on a thermally capped phone.
-        pinRasterThread("0f");
+        // Reserve cpu0..cpu1 for the Android-side raster worker and leave
+        // cpu2..cpu7 available to the six QEMU guest vCPUs.
+        pinRasterThread("03");
         ClearRenderer gpu = null;
         try {
             gpu = new ClearRenderer();

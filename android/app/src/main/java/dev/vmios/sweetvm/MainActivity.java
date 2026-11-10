@@ -1070,7 +1070,7 @@ public final class MainActivity extends Activity {
         box.addView(fpsLabel);
         box.addView(seek);
         box.addView(text("QEMU 固定 3 GB 客户机内存；vCPU 数取自 cpus=N，默认单线程 TCG。"
-                + "勾选多线程 TCG 会自动设置 cpus=6 和 tcgmulti=1（当前实测最快配置）。参数长度上限 607 字节。",
+                + "勾选多线程 TCG 会自动设置 cpus=6 和 tcgmulti=1。参数长度上限 607 字节。",
                 10, DIM, false));
         AlertDialog d = new AlertDialog.Builder(this)
                 .setTitle("高级选项")
