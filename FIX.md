@@ -52,6 +52,14 @@
 - Confirmed baseline already had IOSurfaceCreate-first allocation (BGRA FourCC) with calloc fallback and mapped-texture priority before the 1 MiB upload fallback; these existing paths were not falsely recorded as new fixes.
 - Payload workflow is expected to start automatically from the `SweetMetal.m` push. Run ID pending; verify it uses the correct XNU kernel before treating it as a valid end-to-end build.
 
+
+### Kernel-side diagnostic and build
+- Updated `xnu/patches/0097-sweet-gpu-ca-draw.patch`: when `IOSurfaceRootUserClient::create()` cannot obtain backing memory (including wired-memory quota rejection), it now emits `SWEET SURF: memory allocation failed ...` before returning through the existing failure path. The existing physically-contiguous-first / shared-page fallback allocation remains intact; this is an observability addition, not a claim that the allocation failure itself is already solved.
+- Corrected and rechecked the patch hunk formatting/count before the latest push.
+- XNU build automatically started from the patch push: run `42897881292`, URL https://github.com/wangyitao978-blip/vms/actions/runs/42897881292 (pending at last check). Earlier rapid-push XNU run `42897824684` was cancelled; run `42897740807` was still in progress at last check and is superseded by the latest commit.
+- Latest commit SHA: `5ec6cf3c8e8603635ba548f6c503588c9245ee0f`.
+- On successful XNU completion, the payload workflow's `workflow_run` trigger should build using that exact XNU run's `xnu-kernel` artifact. Verify payload run head SHA and downloaded kernel provenance before reporting success.
+
 ### Cancellations / reversals
 - Explicitly cancelled: changing 550/551 to BGR10A2Unorm. Do not reintroduce.
 - Leave 554/555 unchanged.
