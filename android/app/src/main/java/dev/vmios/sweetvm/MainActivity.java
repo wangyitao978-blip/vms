@@ -840,8 +840,9 @@ public final class MainActivity extends Activity {
                 t.send(type, x, y);
             }
         });
+        // Let FramebufferView fit the guest framebuffer to the actual display size.
         FrameLayout.LayoutParams fbLp = new FrameLayout.LayoutParams(
-                Payload.FB_W, Payload.FB_H, Gravity.CENTER);
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         root.addView(fbView, fbLp);
 
         LinearLayout metrics = new LinearLayout(this);
@@ -880,12 +881,14 @@ public final class MainActivity extends Activity {
                 new LinearLayout.LayoutParams(dp(26), dp(42)));
 
         TextView power = placeholderControl("⏻", "电源按钮（预留）", 16);
+        // Match the power key's length to the complete two-button volume rocker.
+        final int sideControlHeight = dp(94); // 42 + 4 + 42 + 3 + 3 dp
         FrameLayout.LayoutParams powerLp = new FrameLayout.LayoutParams(
-                dp(30), dp(48), Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+                dp(30), sideControlHeight, Gravity.RIGHT | Gravity.TOP);
         root.addView(power, powerLp);
         FrameLayout.LayoutParams volumeLp = new FrameLayout.LayoutParams(
                 dp(30), ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.LEFT | Gravity.CENTER_VERTICAL);
+                Gravity.LEFT | Gravity.TOP);
         root.addView(volumeColumn, volumeLp);
 
         // Keep metrics in the top letterbox margin. If the device is too short
@@ -896,6 +899,15 @@ public final class MainActivity extends Activity {
             FrameLayout.LayoutParams mlp = (FrameLayout.LayoutParams) metrics.getLayoutParams();
             mlp.topMargin = Math.max(0, panelTop - dp(34));
             metrics.setLayoutParams(mlp);
+
+            // Place both side-control groups with their vertical center at 1/4 screen height.
+            int controlsTop = Math.max(0, v.getHeight() / 4 - sideControlHeight / 2);
+            FrameLayout.LayoutParams plp = (FrameLayout.LayoutParams) power.getLayoutParams();
+            plp.topMargin = controlsTop;
+            power.setLayoutParams(plp);
+            FrameLayout.LayoutParams vlp = (FrameLayout.LayoutParams) volumeColumn.getLayoutParams();
+            vlp.topMargin = controlsTop;
+            volumeColumn.setLayoutParams(vlp);
         });
 
         vmScreen = root;
