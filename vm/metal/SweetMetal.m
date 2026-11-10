@@ -1979,6 +1979,8 @@ static unsigned long sweet_texel_bpp(unsigned long fmt);
 	unsigned long tex_format;
 	unsigned long tex_bpr;
 	void *tex_pixels;
+	void *tex_surface_ref;
+	unsigned int tex_surface_seed;
 	unsigned long tex_dirty;
 	unsigned long tex_rendered;
 @public
@@ -2000,6 +2002,7 @@ static unsigned long sweet_texel_bpp(unsigned long fmt);
 - (void *)pixelBytes;
 - (unsigned long)bytesPerRow;
 - (int)ensureRenderPixels;
+- (void)releaseRenderSurface;
 - (void)markRendered;
 - (unsigned long)rendered;
 @end
@@ -2034,6 +2037,111 @@ sweet_readable_extent(const void *pointer, unsigned long want)
 		got += avail;
 	}
 	return got;
+}
+
+
+/*
+ * Allocate render-target storage as an IOSurface so the GPU-wire host can
+ * address large offscreen textures by surface ID. The surface is kept locked
+ * by its owning SweetTexture; individual render/sample mappings take their
+ * own lookup/lock references and release them at encoder completion.
+ */
+static int
+sweet_render_surface_create(unsigned long width, unsigned long height,
+    void **out_ref, unsigned int *out_seed, unsigned int *out_id,
+    unsigned char **out_base, unsigned long *out_bpr)
+{
+	typedef const void *SweetCFType;
+	void *cf = dlopen(
+	    "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", 2);
+	if (cf == 0) {
+		return -1;
+	}
+	SweetCFType (*dict_new)(SweetCFType, long, const void *, const void *) =
+	    dlsym(cf, "CFDictionaryCreateMutable");
+	void (*dict_set)(SweetCFType, SweetCFType, SweetCFType) =
+	    dlsym(cf, "CFDictionarySetValue");
+	SweetCFType (*num_new)(SweetCFType, long, const void *) =
+	    dlsym(cf, "CFNumberCreate");
+	SweetCFType (*str_new)(SweetCFType, const char *, unsigned) =
+	    dlsym(cf, "CFStringCreateWithCString");
+	void (*cf_release)(SweetCFType) = dlsym(cf, "CFRelease");
+	void *kcb = dlsym(cf, "kCFTypeDictionaryKeyCallBacks");
+	void *vcb = dlsym(cf, "kCFTypeDictionaryValueCallBacks");
+	void *ios = dlopen(
+	    "/System/Library/Frameworks/IOSurface.framework/IOSurface", 2);
+	if (dict_new == 0 || dict_set == 0 || num_new == 0 || str_new == 0 ||
+	    cf_release == 0 || kcb == 0 || vcb == 0 || ios == 0 ||
+	    width > 8192 || height > 8192 || width * 4 > 0x7fffffffUL ||
+	    (height != 0 && width * 4 > 0x7fffffffUL / height)) {
+		return -1;
+	}
+	void *(*surface_create)(SweetCFType) = dlsym(ios, "IOSurfaceCreate");
+	unsigned int (*get_id)(SweetCFType) = dlsym(ios, "IOSurfaceGetID");
+	void *(*get_base)(SweetCFType) = dlsym(ios, "IOSurfaceGetBaseAddress");
+	unsigned long (*get_bpr)(SweetCFType) = dlsym(ios, "IOSurfaceGetBytesPerRow");
+	int (*lock)(SweetCFType, unsigned int, unsigned int *) =
+	    dlsym(ios, "IOSurfaceLock");
+	int (*unlock)(SweetCFType, unsigned int, unsigned int *) =
+	    dlsym(ios, "IOSurfaceUnlock");
+	void (*release_surface)(SweetCFType) = dlsym(ios, "IOSurfaceRelease");
+	if (surface_create == 0 || get_id == 0 || get_base == 0 ||
+	    get_bpr == 0 || lock == 0 || unlock == 0 || release_surface == 0) {
+		return -1;
+	}
+	SweetCFType dict = dict_new(0, 8, kcb, vcb);
+	if (dict == 0) {
+		return -1;
+	}
+	struct { const char *key; int value; } props[] = {
+		{ "IOSurfaceWidth", (int)width },
+		{ "IOSurfaceHeight", (int)height },
+		{ "IOSurfaceBytesPerRow", (int)(width * 4) },
+		{ "IOSurfaceAllocSize", (int)(width * 4 * height) },
+		{ "IOSurfacePixelFormat", 0x42475241 },
+	};
+	int properties_ok = 1;
+	for (unsigned int i = 0; i < sizeof(props) / sizeof(props[0]); i++) {
+		SweetCFType key = str_new(0, props[i].key, 0x08000100);
+		SweetCFType value = num_new(0, 3, &props[i].value);
+		if (key == 0 || value == 0) {
+			properties_ok = 0;
+			if (key != 0) cf_release(key);
+			if (value != 0) cf_release(value);
+			break;
+		}
+		dict_set(dict, key, value);
+		cf_release(key);
+		cf_release(value);
+	}
+	if (!properties_ok) {
+		cf_release(dict);
+		return -1;
+	}
+	SweetCFType ref = surface_create(dict);
+	cf_release(dict);
+	if (ref == 0) {
+		return -1;
+	}
+	unsigned int seed = 0;
+	if (lock(ref, 0, &seed) != 0) {
+		release_surface(ref);
+		return -1;
+	}
+	unsigned int identifier = get_id(ref);
+	unsigned char *base = (unsigned char *)get_base(ref);
+	unsigned long bpr = get_bpr(ref);
+	if (identifier == 0 || base == 0 || bpr < width * 4) {
+		unlock(ref, 0, &seed);
+		release_surface(ref);
+		return -1;
+	}
+	*out_ref = (void *)ref;
+	*out_seed = seed;
+	*out_id = identifier;
+	*out_base = base;
+	*out_bpr = bpr;
+	return 0;
 }
 
 @implementation SweetTexture
@@ -2074,6 +2182,29 @@ sweet_readable_extent(const void *pointer, unsigned long want)
 	return tex_format;
 }
 
+- (void)releaseRenderSurface
+{
+	if (tex_surface_ref == 0) {
+		return;
+	}
+	int (*unlock)(id, unsigned int, unsigned int *) =
+	    (int (*)(id, unsigned int, unsigned int *))
+	    sweet_iosurface_symbol("IOSurfaceUnlock");
+	void (*release_surface)(id) =
+	    (void (*)(id))sweet_iosurface_symbol("IOSurfaceRelease");
+	if (unlock != 0) {
+		unlock((id)tex_surface_ref, 0, &tex_surface_seed);
+	}
+	if (release_surface != 0) {
+		release_surface((id)tex_surface_ref);
+	}
+	tex_surface_ref = 0;
+	tex_surface_seed = 0;
+	tex_surface = 0;
+	tex_pixels = 0;
+	tex_bpr = 0;
+}
+
 - (void)storeUpload:(const void *)bytes bytesPerRow:(unsigned long)bytes_per_row
     height:(unsigned long)height
 {
@@ -2081,7 +2212,9 @@ sweet_readable_extent(const void *pointer, unsigned long want)
 	if (bytes == 0 || need == 0) {
 		return;
 	}
-	if (tex_pixels != 0) {
+	if (tex_surface_ref != 0) {
+		[self releaseRenderSurface];
+	} else if (tex_pixels != 0) {
 		free(tex_pixels);
 		tex_pixels = 0;
 	}
@@ -2188,31 +2321,64 @@ sweet_readable_extent(const void *pointer, unsigned long want)
 - (int)ensureRenderPixels
 {
 	if (tex_width == 0 || tex_height == 0 || tex_width > 8192 ||
-	    tex_height > 8192) {
+	    tex_height > 8192 || [self bytesPerPixel] != 4) {
 		return -1;
 	}
-	unsigned long bpr = tex_width * [self bytesPerPixel];
-	if (tex_pixels != 0 && tex_bpr == bpr) {
+	if (tex_surface_ref != 0 && tex_pixels != 0) {
 		return 0;
 	}
-	free(tex_pixels);
-	tex_pixels = calloc(bpr * tex_height, 1);
-	if (tex_pixels == 0) {
-		tex_bpr = 0;
-		return -1;
+	if (tex_surface_ref != 0) {
+		[self releaseRenderSurface];
+	} else if (tex_pixels != 0) {
+		free(tex_pixels);
+		tex_pixels = 0;
 	}
-	tex_bpr = bpr;
+	tex_surface = 0;
+	tex_bpr = 0;
+	unsigned int identifier = 0;
+	unsigned int seed = 0;
+	unsigned char *base = 0;
+	unsigned long bpr = 0;
+	void *ref = 0;
+	if (sweet_render_surface_create(tex_width, tex_height, &ref, &seed,
+	    &identifier, &base, &bpr) == 0) {
+		tex_surface_ref = ref;
+		tex_surface_seed = seed;
+		tex_surface = identifier;
+		tex_pixels = base;
+		tex_bpr = bpr;
+		dprintf(console_fd,
+		    "SWEETMETAL: offscreen IOSurface id=%u %lux%lu bpr=%lu base=%p%c",
+		    identifier, tex_width, tex_height, tex_bpr, tex_pixels, 10);
+	} else {
+		/*
+		 * Preserve the previous local-only behavior if IOSurface creation
+		 * is unavailable. Large heap-backed targets will still fall back
+		 * to local rasterization rather than failing the render encoder.
+		 */
+		unsigned long heap_bpr = tex_width * 4;
+		tex_pixels = calloc(heap_bpr * tex_height, 1);
+		if (tex_pixels == 0) {
+			tex_bpr = 0;
+			return -1;
+		}
+		tex_bpr = heap_bpr;
+		dprintf(console_fd,
+		    "SWEETMETAL: offscreen heap fallback %lux%lu bpr=%lu %p%c",
+		    tex_width, tex_height, tex_bpr, tex_pixels, 10);
+	}
 	tex_dirty = 1;
-	dprintf(console_fd,
-	    "SWEETMETAL: offscreen storage %lux%lu fmt=%lu bpr=%lu %p%c",
-	    tex_width, tex_height, tex_format, tex_bpr, tex_pixels, 10);
 	return 0;
 }
 
 - (void)dealloc
 {
-	free(tex_pixels);
-	tex_pixels = 0;
+	if (tex_surface_ref != 0) {
+		[self releaseRenderSurface];
+	} else {
+		free(tex_pixels);
+		tex_pixels = 0;
+	}
 	[super dealloc];
 }
 
@@ -2811,47 +2977,57 @@ typedef struct {
 	return self;
 }
 
-/* Render targets created with newTextureWithDescriptor have no IOSurface;
- * keep their pixels here so later draws can sample what was rendered. */
+/*
+ * Offscreen render targets are backed by IOSurfaces when available. Map the
+ * target for this encoder so local raster writes land in the same pages that
+ * later draw batches expose to the Android host by surface ID.
+ */
 - (void)setTargetTexture:(id)texture
 {
 	enc_target_tex = texture;
 	if (texture == 0 || enc_map.base != 0) {
 		return;
 	}
-	if (((unsigned int (*)(id, SEL))objc_msgSend)(texture,
-	    sel_registerName("surfaceID")) != 0) {
-		return;
+	unsigned int identifier = ((unsigned int (*)(id, SEL))objc_msgSend)(
+	    texture, sel_registerName("surfaceID"));
+	if (identifier == 0) {
+		if (((int (*)(id, SEL))objc_msgSend)(texture,
+		    sel_registerName("ensureRenderPixels")) != 0) {
+			return;
+		}
+		identifier = ((unsigned int (*)(id, SEL))objc_msgSend)(texture,
+		    sel_registerName("surfaceID"));
 	}
-	if (((int (*)(id, SEL))objc_msgSend)(texture,
-	    sel_registerName("ensureRenderPixels")) != 0) {
-		return;
+	if (identifier != 0) {
+		if (sweet_surface_map(identifier, &enc_map) != 0) {
+			dprintf(console_fd,
+			    "SWEETMETAL: offscreen map failed id=%u%c", identifier, 10);
+			return;
+		}
+	} else {
+		enc_map.base = (unsigned char *)((void *(*)(id, SEL))objc_msgSend)(
+		    texture, sel_registerName("pixelBytes"));
+		enc_map.width = ((unsigned long (*)(id, SEL))objc_msgSend)(texture,
+		    sel_registerName("width"));
+		enc_map.height = ((unsigned long (*)(id, SEL))objc_msgSend)(texture,
+		    sel_registerName("height"));
+		enc_map.bytes_per_row = ((unsigned long (*)(id, SEL))objc_msgSend)(
+		    texture, sel_registerName("bytesPerRow"));
 	}
-	enc_map.base = (unsigned char *)((void *(*)(id, SEL))objc_msgSend)(
-	    texture, sel_registerName("pixelBytes"));
-	enc_map.width = ((unsigned long (*)(id, SEL))objc_msgSend)(texture,
-	    sel_registerName("width"));
-	enc_map.height = ((unsigned long (*)(id, SEL))objc_msgSend)(texture,
-	    sel_registerName("height"));
-	enc_map.bytes_per_row = ((unsigned long (*)(id, SEL))objc_msgSend)(
-	    texture, sel_registerName("bytesPerRow"));
-	if (enc_map.bytes_per_row != enc_map.width * 4) {
+	if (enc_map.base == 0 || enc_map.bytes_per_row < enc_map.width * 4) {
 		dprintf(console_fd,
 		    "SWEETMETAL: skip offscreen %lux%lu bpr=%lu (not 8-bit)%c",
 		    enc_map.width, enc_map.height, enc_map.bytes_per_row, 10);
-		enc_map.base = 0;
-		enc_map.width = 0;
-		enc_map.height = 0;
-		enc_map.bytes_per_row = 0;
+		sweet_surface_unmap(&enc_map);
+		bzero(&enc_map, sizeof(enc_map));
 		return;
 	}
 	((void (*)(id, SEL))objc_msgSend)(texture, sel_registerName("markRendered"));
 	dprintf(console_fd,
-	    "SWEETMETAL: render target offscreen %lux%lu bpr=%lu base=%p%c",
-	    enc_map.width, enc_map.height, enc_map.bytes_per_row,
+	    "SWEETMETAL: render target offscreen id=%u %lux%lu bpr=%lu base=%p%c",
+	    identifier, enc_map.width, enc_map.height, enc_map.bytes_per_row,
 	    enc_map.base, 10);
 }
-
 - (void)clearRed:(double)red green:(double)green blue:(double)blue
     alpha:(double)alpha
 {
@@ -3161,8 +3337,12 @@ sweet_texture_surface(id texture)
 			    sel_registerName("pixelBytes"));
 			unsigned int sid = ((unsigned int (*)(id, SEL))objc_msgSend)(enc_tex[i],
 			    sel_registerName("surfaceID"));
-			if (px == 0 && sid != 0 && sid != enc_surface) {
-				/* Cross-process layer content lives in an IOSurface. */
+			if (sid != 0 && sid != enc_surface) {
+				/*
+				 * Map IOSurface-backed textures even when pixelBytes returns
+				 * this process's already-mapped base address. That marks the
+				 * source as host-addressable and avoids the heap-upload limit.
+				 */
 				if (sweet_surface_map(sid, &src_map) == 0) {
 					px = src_map.base;
 					src_mapped = 1;
@@ -3215,9 +3395,9 @@ sweet_texture_surface(id texture)
 		    (int)r.dst_h;
 		/*
 		 * Hand the batch to the host when it can address both surfaces.
-		 * Uploaded pixel buffers travel once per version; a texture this
-		 * process rendered offscreen stays local because its contents
-		 * change every frame and live in heap memory.
+		 * Uploaded pixel buffers travel once per version. Offscreen render
+		 * targets use IOSurfaces when available, so the host can sample their
+		 * pages directly instead of uploading a large heap copy.
 		 *
 		 * Full-size (drawable) destinations are redirected to this
 		 * process's own staging surface; the host must never write a CA
