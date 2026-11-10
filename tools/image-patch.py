@@ -40,6 +40,36 @@ MAGIC = b"dyld_v1"
 BLOCK = 4096
 
 
+def cache_header_metadata(mm, member_start):
+    """Read immutable identifying metadata from a split dyld cache header."""
+    hdr = mm[member_start:member_start + 0x200]
+    if len(hdr) < 0x200 or not hdr.startswith(MAGIC):
+        return None
+    version = hdr[:16].split(bytes([0]), 1)[0].decode("ascii", "replace")
+    # dyld_cache_header.uuid is at offset 88 in supported iOS 16 headers.
+    uuid = hdr[88:104].hex()
+    return {"offset": member_start, "version": version, "uuid": uuid}
+
+
+def inventory(path):
+    """Enumerate dyld cache headers without modifying the disk image."""
+    records = []
+    with open(path, "rb") as f:
+        mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+        try:
+            pos = 0
+            while True:
+                pos = mm.find(MAGIC, pos)
+                if pos < 0:
+                    break
+                record = cache_header_metadata(mm, pos)
+                if record:
+                    records.append(record)
+                pos += len(MAGIC)
+        finally:
+            mm.close()
+    return records
+
 def member_site_offset(mm, member_start, va):
     """File offset of `va` inside the subcache whose header is at member_start.
 
@@ -167,7 +197,7 @@ def phone(hits, pkg, guest):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=("find", "apply", "restore", "phone"))
+    ap.add_argument("cmd", choices=("inventory", "find", "apply", "restore", "phone"))
     ap.add_argument("image")
     ap.add_argument("--presets", default="all", help="'all' or comma separated names")
     ap.add_argument("--undo", help="undo sidecar (default IMAGE.undo.json)")
@@ -188,7 +218,21 @@ def main():
         if n not in sites.PRESETS:
             raise SystemExit("unknown preset %r" % n)
 
+    if a.cmd == "inventory":
+        records = inventory(a.image)
+        print("dyld cache headers: %d" % len(records))
+        for rec in records:
+            print("  offset=0x%x version=%s uuid=%s" %
+                  (rec["offset"], rec["version"], rec["uuid"]))
+        return 0
+
     print("scanning %s (%.1f GiB) for %d site(s)..." % (a.image, os.path.getsize(a.image) / 2**30, len(names)))
+    records = inventory(a.image)
+    if not records:
+        raise SystemExit("no dyld_v1 cache headers found")
+    for rec in records:
+        print("  cache@0x%x version=%s uuid=%s" %
+              (rec["offset"], rec["version"], rec["uuid"]))
     hits, seen = scan(a.image, names)
     print("%d dyld_v1 magic(s) found" % seen)
     if not hits:
