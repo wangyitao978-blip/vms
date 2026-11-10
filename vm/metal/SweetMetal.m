@@ -565,6 +565,7 @@ typedef struct {
 	unsigned long width, height, bytes_per_row;
 } SweetSurfaceMapping;
 
+static void sweet_surface_unmap(SweetSurfaceMapping *mapping);
 static void *sweet_iosurface_library;
 
 static void *
