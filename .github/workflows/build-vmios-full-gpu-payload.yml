@@ -6,17 +6,6 @@ on:
       xnu_run_id:
         description: Successful XNU workflow run ID (artifact name xnu-kernel)
         required: true
-  push:
-    branches: [payload]
-    paths:
-      - "vm/metal/SweetMetal.m"
-      - "vm/metal/Info.plist"
-      - "tools/build-sweetmetal.sh"
-      - "tools/gpu-bundle.py"
-      - "tools/mkadt.py"
-      - "tools/mkpayload.py"
-      - "tools/bootargs.py"
-      - ".github/workflows/build-vmios-full-gpu-payload.yml"
 
 permissions:
   actions: read
@@ -24,7 +13,7 @@ permissions:
 
 jobs:
   payload:
-    if: true
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     timeout-minutes: 45
     steps:
