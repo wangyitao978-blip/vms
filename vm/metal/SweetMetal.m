@@ -2686,24 +2686,39 @@ sweet_decode_internal(const unsigned char *p, float t[4])
 static void
 sweet_texel(const SweetRaster *r, float u, float v, float out[4])
 {
-	/* One-shot evidence probe only: do not alter texture decoding or sampling. */
+	/* One-shot evidence probe only: never changes decode or sampling. */
 	static int fmt550_dumped;
-	if (!fmt550_dumped && r->tex != 0 && r->tex_fmt_px == 550 &&
-	    r->tex_w == 64 && r->tex_h == 64) {
-		fmt550_dumped = 1;
-		const unsigned int *q = (const unsigned int *)r->tex;
-		dprintf(console_fd, "SWEETMETAL: fmt550 dump");
-		for (int i = 0; i < 48; i++) dprintf(console_fd, " %08x", q[i]);
-		unsigned a0 = 0, a1 = 0, a2 = 0, a3 = 0;
-		for (int i = 0; i < 64 * 64; i++) {
-			switch (q[i] >> 30) {
-			case 0: a0++; break; case 1: a1++; break;
-			case 2: a2++; break; default: a3++; break;
+	if (!fmt550_dumped && r->tex != 0 && r->tex_mapped &&
+	    r->tex_fmt_px == 550 && r->tex_w == 64 && r->tex_h == 64 &&
+	    r->tex_bpr >= 64UL * sizeof(unsigned int) &&
+	    r->tex_bpr <= (~0UL - 64UL * sizeof(unsigned int)) / 63UL) {
+		unsigned long probe_bytes = 63UL * r->tex_bpr +
+		    64UL * sizeof(unsigned int);
+		if (sweet_readable_extent(r->tex, probe_bytes) >= probe_bytes) {
+			fmt550_dumped = 1;
+			if (console_fd < 0) console_fd = open("/dev/console", 1);
+			const unsigned int *first = (const unsigned int *)r->tex;
+			dprintf(console_fd, "SWEETMETAL: fmt550 dump");
+			for (int i = 0; i < 48; i++)
+				dprintf(console_fd, " %08x", first[i]);
+			unsigned a0 = 0, a1 = 0, a2 = 0, a3 = 0;
+			for (unsigned y = 0; y < 64; y++) {
+				const unsigned char *row = r->tex + y * r->tex_bpr;
+				for (unsigned x = 0; x < 64; x++) {
+					unsigned int word;
+					memcpy(&word, row + x * sizeof(word), sizeof(word));
+					switch (word >> 30) {
+					case 0: a0++; break;
+					case 1: a1++; break;
+					case 2: a2++; break;
+					default: a3++; break;
+					}
+				}
 			}
+			dprintf(console_fd,
+			    "\nSWEETMETAL: fmt550 top2bits 0=%u 1=%u 2=%u 3=%u\n",
+			    a0, a1, a2, a3);
 		}
-		dprintf(console_fd,
-		    "\nSWEETMETAL: fmt550 top2bits 0=%u 1=%u 2=%u 3=%u\n",
-		    a0, a1, a2, a3);
 	}
 	out[0] = out[1] = out[2] = out[3] = 1.0f;
 	if (r->tex == 0 || r->tex_w == 0 || r->tex_h == 0) {
