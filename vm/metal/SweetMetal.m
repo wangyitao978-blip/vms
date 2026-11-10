@@ -2008,6 +2008,7 @@ static unsigned long sweet_texel_bpp(unsigned long fmt);
 - (unsigned long)bytesPerRow;
 - (int)ensureRenderPixels;
 - (void)releaseRenderSurface;
+- (int)ownsRenderSurface;
 - (void)markRendered;
 - (unsigned long)rendered;
 @end
@@ -2210,6 +2211,7 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 	tex_surface = 0;
 	tex_pixels = 0;
 	tex_bpr = 0;
+	tex_rendered = 0;
 }
 
 - (void)storeUpload:(const void *)bytes bytesPerRow:(unsigned long)bytes_per_row
@@ -2313,6 +2315,11 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 - (unsigned long)bytesPerPixel
 {
 	return sweet_texel_bpp(tex_format);
+}
+
+- (int)ownsRenderSurface
+{
+	return tex_surface_ref != 0;
 }
 
 - (void)markRendered
@@ -3006,6 +3013,10 @@ typedef struct {
 		    sel_registerName("surfaceID"));
 	}
 	if (identifier != 0) {
+		if (!((int (*)(id, SEL))objc_msgSend)(texture,
+		    sel_registerName("ownsRenderSurface"))) {
+			return;
+		}
 		if (sweet_surface_map(identifier, &enc_map) != 0) {
 			dprintf(console_fd,
 			    "SWEETMETAL: offscreen map failed id=%u%c", identifier, 10);
