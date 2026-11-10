@@ -651,6 +651,11 @@ public final class MainActivity extends Activity {
                 cmd = "";
             }
         }
+        // Keep QEMU -smp and the XNU-visible CPU topology aligned at four.
+        cmd = cmd.replaceAll("(^|\\s)cpus=\\d+(?=\\s|$)", "$1cpus=4");
+        if (!cmd.matches("(?s).*?(^|\\s)cpus=4(?=\\s|$).*")) {
+            cmd = (cmd + " cpus=4").trim();
+        }
         if (!cmd.contains("rd=")) {
             cmd = (cmd + " rd=ufsroot0 ufsrw=1 rootrw=1").trim();
         }
