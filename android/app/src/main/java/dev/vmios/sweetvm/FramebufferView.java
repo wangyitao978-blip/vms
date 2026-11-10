@@ -53,12 +53,12 @@ public final class FramebufferView extends View {
         if (w == 0 || h == 0) {
             return true;
         }
-        // The guest surface is presented 1:1 in Android canvas pixels.
-        // Touch coordinates use the same centered, unscaled destination.
-        float left = (w - Payload.FB_W) / 2f;
-        float top = (h - Payload.FB_H) / 2f;
-        float gx = e.getX() - left;
-        float gy = e.getY() - top;
+        // Map touches through the same centered fit-to-screen transform used by onDraw.
+        float scale = Math.min((float) w / Payload.FB_W, (float) h / Payload.FB_H);
+        float left = (w - Payload.FB_W * scale) / 2f;
+        float top = (h - Payload.FB_H * scale) / 2f;
+        float gx = (e.getX() - left) / scale;
+        float gy = (e.getY() - top) / scale;
         if (gx < 0 || gy < 0 || gx >= Payload.FB_W || gy >= Payload.FB_H) {
             return true;
         }
@@ -127,11 +127,14 @@ public final class FramebufferView extends View {
             if (front == null) {
                 return;
             }
-            // Preserve the guest framebuffer's native pixel dimensions.
-            // Center it without scaling; the surrounding area stays opaque black.
-            float left = (w - Payload.FB_W) / 2f;
-            float top = (h - Payload.FB_H) / 2f;
-            dst.set(left, top, left + Payload.FB_W, top + Payload.FB_H);
+            // Fit the full guest image inside the available screen and center it.
+            // Keep its aspect ratio; black letterboxing fills any unused area.
+            float scale = Math.min((float) w / Payload.FB_W, (float) h / Payload.FB_H);
+            float dw = Payload.FB_W * scale;
+            float dh = Payload.FB_H * scale;
+            float left = (w - dw) / 2f;
+            float top = (h - dh) / 2f;
+            dst.set(left, top, left + dw, top + dh);
             canvas.drawBitmap(front, null, dst, paint);
         }
     }
