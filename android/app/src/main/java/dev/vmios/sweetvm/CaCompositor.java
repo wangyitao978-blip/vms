@@ -479,13 +479,20 @@ final class CaCompositor {
 
     private Decoded texture(int flags, int id, int width, int height, int bpr, int fmt) {
         boolean uploaded = (flags & F_UPLOAD_TEX) != 0;
+        boolean internal = (flags & F_INTERNAL) != 0;
         Decoded cached = decoded.get(id);
         if (cached != null && cached.width == width && cached.height == height) {
-            if (!uploaded) {
+            /*
+             * Uploaded textures carry a generation, and ordinary IOSurface
+             * textures are stable. Internal IOSurface render targets are
+             * rewritten by the guest between frames, so never reuse their
+             * decoded pixels from an earlier draw.
+             */
+            if (!uploaded && !internal) {
                 return cached;
             }
             Upload cu = uploads.get(id);
-            if (cached.fromUpload && cu != null && cached.gen == cu.gen) {
+            if (uploaded && cached.fromUpload && cu != null && cached.gen == cu.gen) {
                 return cached;
             }
         }
@@ -495,7 +502,6 @@ final class CaCompositor {
         }
         int[] out = new int[width * height];
         int uploadGeneration = 0;
-        boolean internal = (flags & F_INTERNAL) != 0;
         if ((flags & F_UPLOAD_TEX) != 0) {
             Upload u = uploads.get(id);
             if (u == null || !u.ready) {
