@@ -500,7 +500,9 @@ final class CaCompositor {
                 || (long) width * height > 4_000_000L) {
             return null;
         }
-        int[] out = new int[width * height];
+        int[] out = cached != null && cached.pixels != null
+                && cached.pixels.length == width * height
+                ? cached.pixels : new int[width * height];
         int uploadGeneration = 0;
         if ((flags & F_UPLOAD_TEX) != 0) {
             Upload u = uploads.get(id);
