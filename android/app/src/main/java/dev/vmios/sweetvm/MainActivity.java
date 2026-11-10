@@ -72,6 +72,7 @@ public final class MainActivity extends Activity {
     private TouchSender touch;
     private TextView vmStatus;
     private TextView vmTimer;
+    private TextView vmCpu;
     private TextView vmHint;
     private LinearLayout vmTop;
     private TextView vmPill;
@@ -109,7 +110,12 @@ public final class MainActivity extends Activity {
             lastFrames = f;
             lastFrameTime = now;
             if (vmTimer != null) {
-                vmTimer.setText(String.format(Locale.US, "%02d:%02d · %d fps", s / 60, s % 60, fps));
+                vmTimer.setText(String.format(Locale.US, "%02d:%02d:%02d",
+                        s / 3600, (s / 60) % 60, s % 60));
+            }
+            if (vmCpu != null) {
+                vmCpu.setText(String.format(Locale.US, "QEMU CPU %.0f%%",
+                        engine.cpuUsagePercent()));
             }
             if (s % 5 == 0) {
                 long copies = engine.frames();
@@ -292,6 +298,7 @@ public final class MainActivity extends Activity {
         fbView = null;
         vmStatus = null;
         vmTimer = null;
+        vmCpu = null;
         vmHint = null;
         vmTop = null;
         vmPill = null;
@@ -806,14 +813,25 @@ public final class MainActivity extends Activity {
         }, "sweetvm-start").start();
     }
 
+    private TextView placeholderControl(String glyph, String description) {
+        TextView control = text(glyph, 19, TEXT, true);
+        control.setGravity(Gravity.CENTER);
+        control.setBackground(outline(SURFACE_2, STROKE, 13, 1));
+        control.setContentDescription(description);
+        control.setClickable(false);
+        control.setFocusable(false);
+        return control;
+    }
+
     private void showVmScreen() {
-        // Immersive status bar; keep Android navigation available. The VM
-        // surface has no in-app overlay controls. Use Android Back to stop.
+        // Immersive status bar; keep Android navigation available.
         setVmSystemBars(true);
         clearRoot();
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
+
+        // Guest framebuffer is exactly 1125x2436 Android canvas pixels.
         fbView = new FramebufferView(this);
         fbView.setTouchListener((type, x, y) -> {
             TouchSender t = touch;
@@ -821,8 +839,58 @@ public final class MainActivity extends Activity {
                 t.send(type, x, y);
             }
         });
-        root.addView(fbView, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        FrameLayout.LayoutParams fbLp = new FrameLayout.LayoutParams(
+                Payload.FB_W, Payload.FB_H, Gravity.CENTER);
+        root.addView(fbView, fbLp);
+
+        // Elapsed time and QEMU process CPU usage live in the upper free margin.
+        LinearLayout metrics = new LinearLayout(this);
+        metrics.setOrientation(LinearLayout.HORIZONTAL);
+        metrics.setGravity(Gravity.CENTER);
+        metrics.setPadding(dp(10), dp(5), dp(10), dp(5));
+        metrics.setBackground(outline(SURFACE, STROKE, 12, 1));
+        vmTimer = text("00:00:00", 13, TEXT, true);
+        metrics.addView(vmTimer);
+        View metricGap = new View(this);
+        metrics.addView(metricGap, new LinearLayout.LayoutParams(dp(12), 1));
+        vmCpu = text("QEMU CPU --%", 11, DIM, true);
+        metrics.addView(vmCpu);
+        FrameLayout.LayoutParams metricsLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(34), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        root.addView(metrics, metricsLp);
+
+        // Placeholders only: no volume or power actions are wired yet.
+        TextView volumeUp = placeholderControl("+", "音量增加（预留）");
+        TextView volumeDown = placeholderControl("−", "音量减少（预留）");
+        TextView power = placeholderControl("⏻", "电源按钮（预留）");
+        FrameLayout.LayoutParams upLp = new FrameLayout.LayoutParams(
+                dp(40), dp(40), Gravity.TOP | Gravity.LEFT);
+        upLp.leftMargin = dp(3);
+        root.addView(volumeUp, upLp);
+        FrameLayout.LayoutParams downLp = new FrameLayout.LayoutParams(
+                dp(40), dp(40), Gravity.BOTTOM | Gravity.LEFT);
+        downLp.leftMargin = dp(3);
+        root.addView(volumeDown, downLp);
+        FrameLayout.LayoutParams powerLp = new FrameLayout.LayoutParams(
+                dp(40), dp(40), Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        powerLp.rightMargin = dp(3);
+        root.addView(power, powerLp);
+
+        // Align the side controls to the top and bottom edges of the guest panel.
+        // Keep the metrics above the panel and leave the lower margin otherwise empty.
+        root.addOnLayoutChangeListener((v, left, top, right, bottom,
+                                       oldLeft, oldTop, oldRight, oldBottom) -> {
+            int panelTop = (v.getHeight() - Payload.FB_H) / 2;
+            FrameLayout.LayoutParams mlp = (FrameLayout.LayoutParams) metrics.getLayoutParams();
+            mlp.topMargin = Math.max(dp(2), panelTop - dp(42));
+            metrics.setLayoutParams(mlp);
+            FrameLayout.LayoutParams ulp = (FrameLayout.LayoutParams) volumeUp.getLayoutParams();
+            ulp.topMargin = panelTop;
+            volumeUp.setLayoutParams(ulp);
+            FrameLayout.LayoutParams dlp = (FrameLayout.LayoutParams) volumeDown.getLayoutParams();
+            dlp.bottomMargin = panelTop;
+            volumeDown.setLayoutParams(dlp);
+        });
 
         vmScreen = root;
         rootView.addView(root, new FrameLayout.LayoutParams(
