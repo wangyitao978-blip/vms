@@ -128,8 +128,8 @@ public final class FramebufferView extends View {
             }
             // Exact 1:1 presentation: never scale the 1125x2436 guest panel.
             // The remaining physical display area is opaque black.
-            float left = (w - Payload.FB_W) / 2f;
-            float top = (h - Payload.FB_H) / 2f;
+            int left = (w - Payload.FB_W) / 2;
+            int top = (h - Payload.FB_H) / 2;
             // x/y overload preserves the bitmap's intrinsic width and height.
             canvas.drawBitmap(front, left, top, paint);
         }
