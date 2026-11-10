@@ -61,6 +61,37 @@ public final class VmEngine {
     private long cpuSampleTicks = -1;
     private long cpuSampleTimeMs;
 
+    /** Find the QEMU child process without relying on Process.pid(), which is
+     * not part of Android's java.lang.Process API. taskset execs QEMU, so it
+     * remains a direct child of this app process. */
+    private static File findQemuStatFile() {
+        File[] entries = new File("/proc").listFiles();
+        if (entries == null) return null;
+        long parentPid = android.os.Process.myPid();
+        for (File entry : entries) {
+            if (!entry.isDirectory() || !entry.getName().matches("[0-9]+")) continue;
+            File statFile = new File(entry, "stat");
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.FileReader(statFile))) {
+                String stat = reader.readLine();
+                if (stat == null) continue;
+                int open = stat.indexOf('(');
+                int end = stat.lastIndexOf(')');
+                if (open < 0 || end <= open || end + 2 >= stat.length()) continue;
+                String comm = stat.substring(open + 1, end);
+                String[] fields = stat.substring(end + 2).trim().split("\\s+");
+                // After comm, fields[0] is state and fields[1] is PPID.
+                if (comm.startsWith("qemu-system-")
+                        && Long.parseLong(fields[1]) == parentPid) {
+                    return statFile;
+                }
+            } catch (Exception ignored) {
+                // The process may exit while /proc is being scanned.
+            }
+        }
+        return null;
+    }
+
     /** Approximate QEMU process CPU usage; values above 100% mean multiple cores. */
     public synchronized double cpuUsagePercent() {
         Process p = process;
@@ -69,9 +100,11 @@ public final class VmEngine {
             return 0.0;
         }
         try {
+            File statFile = findQemuStatFile();
+            if (statFile == null) return 0.0;
             String stat;
             try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                    new java.io.FileReader("/proc/" + p.pid() + "/stat"))) {
+                    new java.io.FileReader(statFile))) {
                 stat = reader.readLine();
             }
             if (stat == null) return 0.0;
