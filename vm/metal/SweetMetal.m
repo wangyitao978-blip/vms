@@ -755,7 +755,8 @@ static unsigned int sweet_ca_pending;
 static unsigned int sweet_ca_submitted;
 static unsigned int sweet_ca_local;
 static unsigned int sweet_ca_flushes;
-static unsigned int sweet_ca_failures;
+static unsigned int sweet_ca_map_failures;
+static unsigned int sweet_ca_tx_failures;
 static unsigned int sweet_ca_disabled;
 static unsigned int sweet_ca_logs;
 static volatile int sweet_ca_gate;
@@ -802,20 +803,18 @@ sweet_ca_map(unsigned int identifier)
 		bzero(entry, sizeof(*entry));
 		entry->id = identifier;
 		entry->failed = 1;
-		sweet_ca_failures++;
-		if (sweet_ca_failures >= 3) {
-			sweet_ca_disabled = 1;
-		}
+		/* A bad surface is isolated by its failed cache entry. Do not
+		 * disable host rasterization for unrelated surfaces. */
+		sweet_ca_map_failures++;
 		if (sweet_ca_logs < 16) {
 			sweet_ca_logs++;
 			dprintf(console_fd,
 			    "SWEETMETAL: host map %u failed rc=0x%x reply=%u bytes=%lu failures=%u disabled=%u%c",
 			    identifier, result, output_size >= sizeof(output) ? output[0] : 0,
-			    output_size, sweet_ca_failures, sweet_ca_disabled, 10);
+			    output_size, sweet_ca_map_failures, sweet_ca_disabled, 10);
 		}
 		return 0;
 	}
-	sweet_ca_failures = 0;
 	SweetCAHostMap *entry = &sweet_ca_maps[sweet_ca_map_next++ %
 	    SWEET_CA_MAP_SLOTS];
 	bzero(entry, sizeof(*entry));
@@ -968,12 +967,13 @@ sweet_ca_send(const void *payload, unsigned long bytes)
 	    8 + bytes, 0, &output_size);
 	sweet_ca_leave();
 	if (result != 0) {
-		sweet_ca_failures++;
-		if (sweet_ca_failures > 2) {
+		sweet_ca_tx_failures++;
+		if (sweet_ca_tx_failures >= 3) {
 			sweet_ca_disabled = 1;
 		}
 		return -1;
 	}
+	sweet_ca_tx_failures = 0;
 	sweet_ca_pending++;
 	return 0;
 }
@@ -1021,8 +1021,8 @@ sweet_ca_flush(void)
 		    sweet_ticks_ms(mach_absolute_time() - flush_t0), 10);
 	}
 	if (result != 0) {
-		sweet_ca_failures++;
-		if (sweet_ca_failures > 2) {
+		sweet_ca_tx_failures++;
+		if (sweet_ca_tx_failures >= 3) {
 			sweet_ca_disabled = 1;
 		}
 		if (sweet_ca_logs < 16) {
@@ -1031,6 +1031,8 @@ sweet_ca_flush(void)
 			    "SWEETMETAL: host flush seq %u failed 0x%x%c",
 			    sequence, result, 10);
 		}
+	} else {
+		sweet_ca_tx_failures = 0;
 	}
 	sweet_ca_pending = 0;
 	bzero(sweet_ca_maps, sizeof(sweet_ca_maps));
