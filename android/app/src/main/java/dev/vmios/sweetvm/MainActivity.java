@@ -813,10 +813,10 @@ public final class MainActivity extends Activity {
         }, "sweetvm-start").start();
     }
 
-    private TextView placeholderControl(String glyph, String description) {
-        TextView control = text(glyph, 19, TEXT, true);
+    private TextView placeholderControl(String glyph, String description, int sizeSp) {
+        TextView control = text(glyph, sizeSp, TEXT, true);
         control.setGravity(Gravity.CENTER);
-        control.setBackground(outline(SURFACE_2, STROKE, 13, 1));
+        control.setBackground(outline(SURFACE_2, STROKE, 10, 1));
         control.setContentDescription(description);
         control.setClickable(false);
         control.setFocusable(false);
@@ -831,7 +831,8 @@ public final class MainActivity extends Activity {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
 
-        // Guest framebuffer is exactly 1125x2436 Android canvas pixels.
+        // Center the native-size guest display. Controls are positioned only in
+        // the side gutters and never overlap the framebuffer rectangle.
         fbView = new FramebufferView(this);
         fbView.setTouchListener((type, x, y) -> {
             TouchSender t = touch;
@@ -843,53 +844,58 @@ public final class MainActivity extends Activity {
                 Payload.FB_W, Payload.FB_H, Gravity.CENTER);
         root.addView(fbView, fbLp);
 
-        // Elapsed time and QEMU process CPU usage live in the upper free margin.
         LinearLayout metrics = new LinearLayout(this);
         metrics.setOrientation(LinearLayout.HORIZONTAL);
         metrics.setGravity(Gravity.CENTER);
-        metrics.setPadding(dp(10), dp(5), dp(10), dp(5));
-        metrics.setBackground(outline(SURFACE, STROKE, 12, 1));
-        vmTimer = text("00:00:00", 13, TEXT, true);
+        metrics.setPadding(dp(9), dp(4), dp(9), dp(4));
+        metrics.setBackground(outline(SURFACE, STROKE, 10, 1));
+        vmTimer = text("00:00:00", 12, TEXT, true);
         metrics.addView(vmTimer);
         View metricGap = new View(this);
-        metrics.addView(metricGap, new LinearLayout.LayoutParams(dp(12), 1));
-        vmCpu = text("QEMU CPU --%", 11, DIM, true);
+        metrics.addView(metricGap, new LinearLayout.LayoutParams(dp(8), 1));
+        vmCpu = text("QEMU CPU --%", 10, DIM, true);
         metrics.addView(vmCpu);
         FrameLayout.LayoutParams metricsLp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, dp(34), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(30),
+                Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         root.addView(metrics, metricsLp);
 
-        // Placeholders only: no volume or power actions are wired yet.
-        TextView volumeUp = placeholderControl("+", "音量增加（预留）");
-        TextView volumeDown = placeholderControl("−", "音量减少（预留）");
-        TextView power = placeholderControl("⏻", "电源按钮（预留）");
-        FrameLayout.LayoutParams upLp = new FrameLayout.LayoutParams(
-                dp(40), dp(40), Gravity.TOP | Gravity.LEFT);
-        upLp.leftMargin = dp(3);
-        root.addView(volumeUp, upLp);
-        FrameLayout.LayoutParams downLp = new FrameLayout.LayoutParams(
-                dp(40), dp(40), Gravity.BOTTOM | Gravity.LEFT);
-        downLp.leftMargin = dp(3);
-        root.addView(volumeDown, downLp);
-        FrameLayout.LayoutParams powerLp = new FrameLayout.LayoutParams(
-                dp(40), dp(40), Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-        powerLp.rightMargin = dp(3);
-        root.addView(power, powerLp);
+        // Compact side-mounted volume rocker. The 30dp outer column remains
+        // outside the guest panel; buttons are aligned to the panel's vertical
+        // center, rather than screen corners.
+        LinearLayout volumeColumn = new LinearLayout(this);
+        volumeColumn.setOrientation(LinearLayout.VERTICAL);
+        volumeColumn.setGravity(Gravity.CENTER);
+        volumeColumn.setPadding(0, dp(3), 0, dp(3));
+        volumeColumn.setBackground(outline(SURFACE, STROKE, 12, 1));
 
-        // Align the side controls to the top and bottom edges of the guest panel.
-        // Keep the metrics above the panel and leave the lower margin otherwise empty.
+        TextView volumeUp = placeholderControl("+", "音量增加（预留）", 16);
+        TextView volumeDown = placeholderControl("−", "音量减少（预留）", 16);
+        LinearLayout.LayoutParams rockerButtonLp =
+                new LinearLayout.LayoutParams(dp(26), dp(42));
+        volumeColumn.addView(volumeUp, rockerButtonLp);
+        View rockerGap = new View(this);
+        volumeColumn.addView(rockerGap, new LinearLayout.LayoutParams(1, dp(4)));
+        volumeColumn.addView(volumeDown,
+                new LinearLayout.LayoutParams(dp(26), dp(42)));
+
+        TextView power = placeholderControl("⏻", "电源按钮（预留）", 16);
+        FrameLayout.LayoutParams powerLp = new FrameLayout.LayoutParams(
+                dp(30), dp(48), Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        root.addView(power, powerLp);
+        FrameLayout.LayoutParams volumeLp = new FrameLayout.LayoutParams(
+                dp(30), ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        root.addView(volumeColumn, volumeLp);
+
+        // Keep metrics in the top letterbox margin. If the device is too short
+        // to provide a margin, anchor them at the top without covering content.
         root.addOnLayoutChangeListener((v, left, top, right, bottom,
                                        oldLeft, oldTop, oldRight, oldBottom) -> {
             int panelTop = (v.getHeight() - Payload.FB_H) / 2;
             FrameLayout.LayoutParams mlp = (FrameLayout.LayoutParams) metrics.getLayoutParams();
-            mlp.topMargin = Math.max(dp(2), panelTop - dp(42));
+            mlp.topMargin = Math.max(0, panelTop - dp(34));
             metrics.setLayoutParams(mlp);
-            FrameLayout.LayoutParams ulp = (FrameLayout.LayoutParams) volumeUp.getLayoutParams();
-            ulp.topMargin = panelTop;
-            volumeUp.setLayoutParams(ulp);
-            FrameLayout.LayoutParams dlp = (FrameLayout.LayoutParams) volumeDown.getLayoutParams();
-            dlp.bottomMargin = panelTop;
-            volumeDown.setLayoutParams(dlp);
         });
 
         vmScreen = root;
