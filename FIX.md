@@ -22,3 +22,7 @@ User instructed: restart and fix the workflow/branch mismatch. Intended build br
 - Payload workflow must listen to `payload`; manual dispatch must require an explicit XNU run ID to prevent stale default kernel.
 - XNU workflow must listen to `xun`.
 No source code has yet been ported in this branch. Record actual commits and runs below.
+
+
+## Workflow correction commits
+- APK: updated `.github/workflows/build-apk.yml` so push builds listen only to `apk`; commit `4e232165d79121a97fe786598655996ac92ccbe2`. Build not yet verified.
