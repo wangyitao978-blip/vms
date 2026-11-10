@@ -196,9 +196,20 @@ public final class VmEngine {
         if (!cmdline.contains("tlto_us=")) {
             cmdline = (cmdline + " tlto_us=2000000 slto_us=2000000").trim();
         }
-        if (cmdline.length() >= 600) {
-            android.util.Log.w("sweetvm", "boot args are " + cmdline.length()
-                    + " bytes; the 607-byte boot_args field may truncate the lock timeouts");
+        boolean mttcgRequested = cmdline.contains("tcgmulti=1");
+        if (mttcgRequested
+                && (!cmdline.contains("tlto_us=2000000")
+                || !cmdline.contains("slto_us=2000000"))) {
+            throw new IOException("MTTCG boot args are missing the explicit 2-second "
+                    + "XNU ticket/spin-lock timeouts; refusing an unsafe boot");
+        }
+        android.util.Log.i("sweetvm", "final boot-args bytes=" + cmdline.length()
+                + " cpus=" + cpus + " mttcg=" + mttcgRequested
+                + " tlto_us=" + (cmdline.contains("tlto_us=2000000") ? "2000000" : "default")
+                + " slto_us=" + (cmdline.contains("slto_us=2000000") ? "2000000" : "default"));
+        if (cmdline.length() > 607) {
+            throw new IOException("boot args exceed the 607-byte XNU limit: "
+                    + cmdline.length());
         }
         // 3 GB of resident guest RAM is cheap on a 12-16 GB phone and makes
         // first-touch faults happen at startup instead of inside the vCPU
