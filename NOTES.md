@@ -1,5 +1,25 @@
 # vmios working notes
 
+### >>> ACTIVE: 分支构建/未合并修改审计（2026-11-11 05:16 +08:00）<<<
+
+- 本轮用户要求：检查曾构建 APK、payload、XNU 的其他分支，找出未进入当前 `apk`、`payload`、`xun` 的修改；不用 Work、不反复确认。
+- 审计时目标 HEAD：`apk=9c98d495653f`；`payload=ca7e2fc8dc3d`；`xun=ae8ab927a7c5`。
+- 最新构建状态：
+  - APK Run [42900552648](https://github.com/wangyitao978-blip/vms/actions/runs/42900552648)：成功，branch apk，SHA 9c98d495653f。
+  - Payload Run [42900356120](https://github.com/wangyitao978-blip/vms/actions/runs/42900356120)：成功，branch payload，SHA 4044d46a89ae；host-raster 和 guest-local-raster artifacts 均存在。
+  - XNU Run [42900388186](https://github.com/wangyitao978-blip/vms/actions/runs/42900388186)：成功，branch xun，SHA be6516ea6a4b；xnu-kernel 和 xnu-buildtree artifacts 均存在。当前 xun HEAD 比它多两条 workflow 记录提交，没有代码变化。不是仍在构建。
+- 已确认的遗漏/候选：
+  1. `fix/mobilegestalt-boot-and-side-controls` 相对 apk/payload 各有 7 个独有提交，净文件差异为 FIX.md、vm/metal/SweetMetal.m、xnu/patches/0097-sweet-gpu-ca-draw.patch。当前 apk/payload 的 fmt550 probe 仍是未检查 mapped extent/stride 的旧版；side branch 已有 mapped-only、64x64 stride/可读范围校验探针。该文件由 payload workflow 编译，不属于 APK workflow 的构建输入。
+  2. 同一 side branch 相对 xun 有 90 ahead / 32 behind，禁止整支合并。XNU patch 的独有部分是 surface allocation failure / map null-memory 诊断日志；xun 已有 map 返回真实 IOReturn。日志不是修复，仍没有保证 s->memory 非空的代码改动。
+  3. `fix/boot-speed-snapshot-persistence` 相对 apk/payload 各 39 个独有提交，且目标分支有 87/88 个反向独有提交。候选包含 QEMU asset fingerprint/snapshot persistence、冷启动分段计时、默认关闭 3 GiB prealloc、Framebuffer 1:1/触摸映射；其中强制 cpus=2 与当前 4 vCPU 配置冲突，不可整支合并。
+  4. `fix/offscreen-iosurface-textures` 曾成功构建 APK/payload，但与当前目标分支大量分叉（43 ahead、87/88 behind）；当前 payload 已存在 IOSurface render-target 创建/映射/ownership 相关实现，不能把旧分支整体回灌。
+  5. `fix/system-ui-red-blue-channel` 对 apk/payload 均 ahead_by=0，已全部包含。
+  6. `main` 相对目标分支未发现应回灌的代码修改，主要是记录/日志/截图差异。
+- 本轮没有改代码、合并、cherry-pick、改分支名、触发新构建或取消构建。审计记录已追加到 `fix/操作记录.md`（commit `8720a6acaf115e4bca31e10f6f666ee2e1d1197f`，main）。
+- 下一步若继续：逐项检查 boot-speed 候选和 fmt550 探针；XNU 的 s->memory == NULL 根因仍需真正修复，不可把诊断日志称作修复。
+
+---
+
 ### >>> ACTIVE: CA 宿主光栅化（性能整改）(2026-10-25) <<<
 
 **17:47 崩溃根因找到并修复：插件上传 memcpy 越界（不是热限频/光栅）。**
