@@ -22,3 +22,7 @@ User instructed: restart and fix the workflow/branch mismatch. Intended build br
 - Payload workflow must listen to `payload`; manual dispatch must require an explicit XNU run ID to prevent stale default kernel.
 - XNU workflow must listen to `xun`.
 No source code has yet been ported in this branch. Record actual commits and runs below.
+
+
+## Workflow correction commits
+- Payload: push trigger now listens to `payload` only; manual dispatch requires an explicit `xnu_run_id` (removed stale default `42853907291` and the `workflow_run` shortcut). This makes the selected kernel run explicit and prevents silent stale-kernel packaging. Workflow commit `4044d46a89aeb01c102b933a1aeaaa5c4c74f305`. Build not yet verified.
