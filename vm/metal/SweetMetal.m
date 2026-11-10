@@ -3465,6 +3465,12 @@ sweet_texture_surface(id texture)
 		unsigned int tex_id = 0;
 		unsigned int tex_flags = 0;
 		if (host_ok && r.tex != 0) {
+			/*
+			 * Keep this branch ahead of every upload path: mapped IOSurfaces
+			 * are already addressable by the host, including large offscreen
+			 * render targets. They must never be gated by the 1 MiB heap
+			 * upload fallback below.
+			 */
 			if (r.tex_mapped) {
 				if (!sweet_ca_map(r.tex_surface)) {
 					host_ok = 0;
@@ -3492,14 +3498,10 @@ sweet_texture_surface(id texture)
 			    r.tex_w > 0 && r.tex_h > 0 && r.tex_bpr >= r.tex_w * 4 &&
 			    r.tex_bpr * r.tex_h <= (1u << 20)) {
 				/*
-				 * Offscreen render targets live in this process's heap,
-				 * where the host cannot address them, so their whole
-				 * screen-sized composite used to stay on the TCG
-				 * rasterizer (~1.1 s per draw). The local rasterizer
-				 * writes those pixels as RGBA8; sending them costs
-				 * ~175 KB for the 143x307 wallpaper chain, which is far
-				 * cheaper than sampling them under TCG. There is no
-				 * version counter for renders, so upload every use.
+				 * Only the heap fallback reaches this branch. Its pixels are
+				 * not host-addressable, so retain the small-texture upload path;
+				 * large heap fallbacks stay local. IOSurface-backed targets
+				 * must have been handled by r.tex_mapped above.
 				 */
 				SweetTexture *texture = (SweetTexture *)r.tex_owner;
 				if (texture->tex_host_id == 0) {
