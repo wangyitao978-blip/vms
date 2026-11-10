@@ -1023,7 +1023,7 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(150)));
         box.addView(gap(14));
         android.widget.CheckBox mttcgBox = new android.widget.CheckBox(this);
-        mttcgBox.setText("多线程 TCG（试验：2 个 vCPU 真并行，更快但可能 panic）");
+        mttcgBox.setText("多线程 TCG（试验：4 个 vCPU 真并行，更快但可能 panic）");
         mttcgBox.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         mttcgBox.setTextColor(TEXT);
         mttcgBox.setChecked(cfg.mttcg);
