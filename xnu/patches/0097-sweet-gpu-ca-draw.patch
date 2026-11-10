@@ -283,10 +283,10 @@ index 2835d6a..aeef74d 100644
 +		addr64_t first = 0;
 +		IOReturn result = kIOReturnNotReady;
 +		if (s->memory == NULL) {
-+			IOLog("SWEET GPU: map %u: no memory alloc %u\\n",
++			IOLog("SWEET GPU: map %u: no memory alloc %u\n",
 +			    surface, s->allocSize);
 +		} else if (s->allocSize == 0) {
-+			IOLog("SWEET GPU: map %u: allocSize 0\\n", surface);
++			IOLog("SWEET GPU: map %u: allocSize 0\n", surface);
 +		} else {
 +			result = sweet_surface_send_map(s, surface, &pages, &first);
 +		}
