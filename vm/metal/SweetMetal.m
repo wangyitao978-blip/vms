@@ -560,6 +560,7 @@ sweet_probe_panel(void)
  */
 typedef struct {
 	id surface;
+	unsigned int seed;
 	unsigned char *base;
 	unsigned long width, height, bytes_per_row;
 } SweetSurfaceMapping;
@@ -606,15 +607,19 @@ sweet_surface_map(unsigned int identifier, SweetSurfaceMapping *mapping)
 	}
 	unsigned int seed = 0;
 	if (lock(surface, 0, &seed) != 0) {
+		void (*release_surface)(id) =
+		    (void (*)(id))sweet_iosurface_symbol("IOSurfaceRelease");
+		if (release_surface != 0) release_surface(surface);
 		return -1;
 	}
 	mapping->surface = surface;
+	mapping->seed = seed;
 	mapping->base = (unsigned char *)base(surface);
 	mapping->width = width(surface);
 	mapping->height = height(surface);
 	mapping->bytes_per_row = bpr(surface);
 	if (mapping->base == 0) {
-		mapping->surface = 0;
+		sweet_surface_unmap(mapping);
 		return -1;
 	}
 	return 0;
@@ -628,8 +633,7 @@ sweet_surface_unmap(SweetSurfaceMapping *mapping)
 		    unsigned int, unsigned int *))
 		    sweet_iosurface_symbol("IOSurfaceUnlock");
 		if (unlock != 0) {
-			unsigned int seed = 0;
-			unlock(mapping->surface, 0, &seed);
+			unlock(mapping->surface, 0, &mapping->seed);
 		}
 		void (*release_surface)(id) = (void (*)(id))
 		    sweet_iosurface_symbol("IOSurfaceRelease");
@@ -2073,7 +2077,8 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 	if (dict_new == 0 || dict_set == 0 || num_new == 0 || str_new == 0 ||
 	    cf_release == 0 || kcb == 0 || vcb == 0 || ios == 0 ||
 	    width > 8192 || height > 8192 || width * 4 > 0x7fffffffUL ||
-	    (height != 0 && width * 4 > 0x7fffffffUL / height)) {
+	    (height != 0 && ((width * 4 + 63) & ~63UL) >
+	        0x7fffffffUL / height)) {
 		return -1;
 	}
 	void *(*surface_create)(SweetCFType) = dlsym(ios, "IOSurfaceCreate");
@@ -2093,11 +2098,12 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 	if (dict == 0) {
 		return -1;
 	}
+	unsigned long requested_bpr = (width * 4 + 63) & ~63UL;
 	struct { const char *key; int value; } props[] = {
 		{ "IOSurfaceWidth", (int)width },
 		{ "IOSurfaceHeight", (int)height },
-		{ "IOSurfaceBytesPerRow", (int)(width * 4) },
-		{ "IOSurfaceAllocSize", (int)(width * 4 * height) },
+		{ "IOSurfaceBytesPerRow", (int)requested_bpr },
+		{ "IOSurfaceAllocSize", (int)(requested_bpr * height) },
 		{ "IOSurfacePixelFormat", 0x42475241 },
 	};
 	int properties_ok = 1;
@@ -3370,9 +3376,9 @@ sweet_texture_surface(id texture)
 			/* Uploaded pixels keep their declared format; IOSurface memory
 			 * this process renders into, and offscreen targets it has
 			 * rendered, are RGBA8 whatever the format says. */
-			r.tex_internal = src_mapped ? 1 : 0;
-			if (!r.tex_internal && ((BOOL (*)(id, SEL, Class))objc_msgSend)(
-			    enc_tex[i], sel_registerName("isKindOfClass:"),
+			r.tex_internal = 0;
+			if (((BOOL (*)(id, SEL, Class))objc_msgSend)(enc_tex[i],
+			    sel_registerName("isKindOfClass:"),
 			    objc_getClass("SweetTexture"))) {
 				r.tex_internal = ((unsigned long (*)(id, SEL))objc_msgSend)(
 				    enc_tex[i], sel_registerName("rendered")) != 0;
