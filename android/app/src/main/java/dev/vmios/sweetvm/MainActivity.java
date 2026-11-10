@@ -662,9 +662,7 @@ public final class MainActivity extends Activity {
         cmd = ensureQemuArgs(cmd);
         cmd = enableTouch(cmd);
         if (cfg.mttcg) {
-            // The tested fast profile is four real vCPUs with MTTCG. Six
-            // vCPUs were slower under the same workload, so keep the proven
-            // four-core configuration instead of over-subscribing the host.
+            // Four guest CPUs are the current measured MTTCG profile.
             java.util.regex.Matcher cpu = java.util.regex.Pattern
                     .compile("(^|\\s)cpus=\\d+").matcher(cmd);
             if (cpu.find()) {
@@ -675,6 +673,13 @@ public final class MainActivity extends Activity {
             if (!cmd.contains("tcgmulti=1")) {
                 cmd = (cmd + " tcgmulti=1").trim();
             }
+        }
+        // Keep the ticket-lock timeout explicit in the final boot-args string.
+        // VmEngine used to append it later, where a 607-byte truncation or a
+        // pre-existing tlto_us value could silently leave XNU at 125 ms.
+        if (cfg.mttcg || cmd.contains("tcgmulti=1")) {
+            cmd = setBootArg(cmd, "tlto_us", "2000000");
+            cmd = setBootArg(cmd, "slto_us", "2000000");
         }
         return truncateCmdline(cmd);
     }
@@ -722,19 +727,36 @@ public final class MainActivity extends Activity {
         return b.toString().trim();
     }
 
-    /** VmEngine appends " tlto_us=2000000 slto_us=2000000" for MTTCG. */
-    private static final int MTTCG_LOCK_ARGS = 34;
+    private String setBootArg(String cmd, String key, String value) {
+        java.util.regex.Pattern pattern = java.util.regex.Pattern
+                .compile("(^|\\\\s)" + key + "=\\\\S+");
+        java.util.regex.Matcher matcher = pattern.matcher(cmd);
+        if (matcher.find()) {
+            return matcher.replaceAll("$1" + key + "=" + value);
+        }
+        return (cmd + " " + key + "=" + value).trim();
+    }
 
     private String truncateCmdline(String cmd) {
-        int limit = cfg.mttcg ? 607 - MTTCG_LOCK_ARGS : 607;
-        if (cmd.length() <= limit) {
-            return cmd;
+        final int limit = 607;
+        boolean multi = cfg.mttcg || cmd.contains("tcgmulti=1");
+        if (!multi) {
+            if (cmd.length() <= limit) return cmd;
+            int cut = cmd.lastIndexOf(' ', limit);
+            return cmd.substring(0, cut < 0 ? limit : cut);
         }
-        int cut = cmd.lastIndexOf(' ', limit);
-        if (cut < 0) {
-            cut = limit;
+
+        // Preserve the lock-timeout arguments at the end of the fixed-size
+        // boot_args field; truncate optional earlier arguments first.
+        String suffix = " tlto_us=2000000 slto_us=2000000";
+        cmd = cmd.replaceAll("(^|\\\\s)tlto_us=\\\\S+", "")
+                 .replaceAll("(^|\\\\s)slto_us=\\\\S+", "").trim();
+        int prefixLimit = limit - suffix.length();
+        if (cmd.length() > prefixLimit) {
+            int cut = cmd.lastIndexOf(' ', prefixLimit);
+            cmd = cmd.substring(0, cut < 0 ? prefixLimit : cut);
         }
-        return cmd.substring(0, cut);
+        return cmd + suffix;
     }
 
     private void startDemo() {
