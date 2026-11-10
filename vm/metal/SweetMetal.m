@@ -744,6 +744,7 @@ typedef struct {
 	unsigned int id;
 	unsigned int first_lo, first_hi;
 	unsigned int alloc_lo, alloc_hi;
+	unsigned int failed;
 } SweetCAHostMap;
 
 static SweetCAHostMap sweet_ca_maps[SWEET_CA_MAP_SLOTS];
@@ -786,7 +787,7 @@ sweet_ca_map(unsigned int identifier)
 	}
 	for (unsigned int i = 0; i < SWEET_CA_MAP_SLOTS; i++) {
 		if (sweet_ca_maps[i].id == identifier) {
-			return 1;
+			return sweet_ca_maps[i].failed == 0;
 		}
 	}
 	unsigned int input = identifier;
@@ -795,16 +796,28 @@ sweet_ca_map(unsigned int identifier)
 	int result = IOConnectCallStructMethod(sweet_accel_port, 0x104, &input,
 	    sizeof(input), output, &output_size);
 	if (result != 0 || output_size < sizeof(output) || output[0] == 0) {
-		if (sweet_ca_logs < 8) {
+		SweetCAHostMap *entry = &sweet_ca_maps[sweet_ca_map_next++ %
+		    SWEET_CA_MAP_SLOTS];
+		bzero(entry, sizeof(*entry));
+		entry->id = identifier;
+		entry->failed = 1;
+		sweet_ca_failures++;
+		if (sweet_ca_failures >= 3) {
+			sweet_ca_disabled = 1;
+		}
+		if (sweet_ca_logs < 16) {
 			sweet_ca_logs++;
 			dprintf(console_fd,
-			    "SWEETMETAL: host map %u failed 0x%x%c", identifier,
-			    result, 10);
+			    "SWEETMETAL: host map %u failed rc=0x%x reply=%u bytes=%lu failures=%u disabled=%u%c",
+			    identifier, result, output_size >= sizeof(output) ? output[0] : 0,
+			    output_size, sweet_ca_failures, sweet_ca_disabled, 10);
 		}
 		return 0;
 	}
+	sweet_ca_failures = 0;
 	SweetCAHostMap *entry = &sweet_ca_maps[sweet_ca_map_next++ %
 	    SWEET_CA_MAP_SLOTS];
+	bzero(entry, sizeof(*entry));
 	entry->id = identifier;
 	entry->first_lo = output[4];
 	entry->first_hi = output[5];
