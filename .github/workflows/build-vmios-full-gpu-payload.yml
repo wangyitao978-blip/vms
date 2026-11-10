@@ -6,7 +6,7 @@ on:
       xnu_run_id:
         description: Successful XNU workflow run ID (artifact name xnu-kernel)
         required: false
-        default: "42613199421"
+        default: "42853907291"
   workflow_run:
     workflows: ["xnu"]
     types: [completed]
@@ -40,7 +40,7 @@ jobs:
       - name: Download the successful XNU kernel with its SMC PSCI conduit
         env:
           GH_TOKEN: ${{ github.token }}
-          XNU_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.xnu_run_id || '42613199421' }}
+          XNU_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.xnu_run_id || '42853907291' }}
         run: |
           set -euo pipefail
           gh run download "$XNU_RUN_ID" \
