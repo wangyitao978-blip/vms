@@ -729,7 +729,7 @@ public final class MainActivity extends Activity {
 
     private String setBootArg(String cmd, String key, String value) {
         java.util.regex.Pattern pattern = java.util.regex.Pattern
-                .compile("(^|\\\\s)" + key + "=\\\\S+");
+                .compile("(^|\\s)" + key + "=\\S+");
         java.util.regex.Matcher matcher = pattern.matcher(cmd);
         if (matcher.find()) {
             return matcher.replaceAll("$1" + key + "=" + value);
@@ -749,8 +749,8 @@ public final class MainActivity extends Activity {
         // Preserve the lock-timeout arguments at the end of the fixed-size
         // boot_args field; truncate optional earlier arguments first.
         String suffix = " tlto_us=2000000 slto_us=2000000";
-        cmd = cmd.replaceAll("(^|\\\\s)tlto_us=\\\\S+", "")
-                 .replaceAll("(^|\\\\s)slto_us=\\\\S+", "").trim();
+        cmd = cmd.replaceAll("(^|\\s)tlto_us=\\S+", "")
+                 .replaceAll("(^|\\s)slto_us=\\S+", "").trim();
         int prefixLimit = limit - suffix.length();
         if (cmd.length() > prefixLimit) {
             int cut = cmd.lastIndexOf(' ', prefixLimit);
