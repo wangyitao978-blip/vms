@@ -601,7 +601,7 @@ sweet_iosurface_metal_format(unsigned int fourcc, unsigned long fallback)
 			}
 			if (console_fd >= 0) {
 				dprintf(console_fd,
-				    "SWEETMETAL: unknown IOSurface FourCC=0x%08x fallback=%lu\\n",
+				    "SWEETMETAL: unknown IOSurface FourCC=0x%08x fallback=%lu\n",
 				    fourcc, fallback);
 			}
 		}
