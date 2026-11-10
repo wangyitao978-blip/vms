@@ -452,7 +452,13 @@ Java_dev_vmios_sweetvm_CaCompositor_nativeTriangle(JNIEnv *env, jclass cls,
         int rows = maxy - miny;
         long area_px = (long)rows * (long)(maxx - minx);
         (void)area_px;
-        int threads = 1; /* A/B: threading off */
+        /*
+         * nativeTriangle is called once per triangle, so creating workers for
+         * tiny UI geometry costs more than it saves. Split only substantial
+         * coverage areas; bands own disjoint scanlines and cannot race.
+         */
+        int threads = area_px >= 262144L ? 4 :
+            (area_px >= 65536L ? 2 : 1);
         if (threads <= 1) {
             raster_band(&c, miny, maxy, &covered);
             break;
