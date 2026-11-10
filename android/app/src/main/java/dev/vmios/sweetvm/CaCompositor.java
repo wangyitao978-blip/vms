@@ -479,13 +479,20 @@ final class CaCompositor {
 
     private Decoded texture(int flags, int id, int width, int height, int bpr, int fmt) {
         boolean uploaded = (flags & F_UPLOAD_TEX) != 0;
+        boolean internal = (flags & F_INTERNAL) != 0;
         Decoded cached = decoded.get(id);
         if (cached != null && cached.width == width && cached.height == height) {
-            if (!uploaded) {
+            /*
+             * Uploaded textures carry a generation, and ordinary IOSurface
+             * textures are stable. Internal IOSurface render targets are
+             * rewritten by the guest between frames, so never reuse their
+             * decoded pixels from an earlier draw.
+             */
+            if (!uploaded && !internal) {
                 return cached;
             }
             Upload cu = uploads.get(id);
-            if (cached.fromUpload && cu != null && cached.gen == cu.gen) {
+            if (uploaded && cached.fromUpload && cu != null && cached.gen == cu.gen) {
                 return cached;
             }
         }
@@ -493,9 +500,10 @@ final class CaCompositor {
                 || (long) width * height > 4_000_000L) {
             return null;
         }
-        int[] out = new int[width * height];
+        int[] out = cached != null && cached.pixels != null
+                && cached.pixels.length == width * height
+                ? cached.pixels : new int[width * height];
         int uploadGeneration = 0;
-        boolean internal = (flags & F_INTERNAL) != 0;
         if ((flags & F_UPLOAD_TEX) != 0) {
             Upload u = uploads.get(id);
             if (u == null || !u.ready) {
@@ -691,27 +699,31 @@ final class CaCompositor {
                 return pack(r, g, bl, 1f);
             }
             /*
-             * BGR10_XR is a packed 32-bit B:G:R format. Bits 30-31 are
-             * padding, not alpha; sampled alpha is therefore opaque.
+             * The 554/555 wire formats are the alpha-bearing packed 10-bit
+             * variants used by the IOSurface compositor.  They share the
+             * little-endian R10:G10:B10 layout of 550/551, with the top two
+             * bits carrying A2.  Falling through to the BGRA8 default turns
+             * full-screen XR surfaces into the red/black bands seen on the
+             * device.
              */
             case 554:
             case 555: {
                 int raw = b.getInt(i);
-                float bl = xr10(raw & 0x3ff);
+                float r = xr10(raw & 0x3ff);
                 float g = xr10((raw >> 10) & 0x3ff);
-                float r = xr10((raw >> 20) & 0x3ff);
-                return pack(r, g, bl, 1f);
+                float bl = xr10((raw >> 20) & 0x3ff);
+                float a = ((raw >>> 30) & 0x3) / 3f;
+                return pack(r, g, bl, a);
             }
-            /*
-             * BGRA10_XR stores 16-bit components in B,G,R,A order.
-             */
             case 552:
             case 553: {
-                float bl = xr16(b.getShort(i) & 0xffff);
+                float r = xr16(b.getShort(i) & 0xffff);
                 float g = xr16(b.getShort(i + 2) & 0xffff);
-                float r = xr16(b.getShort(i + 4) & 0xffff);
-                float a = xr16(b.getShort(i + 6) & 0xffff);
-                return pack(r, g, bl, a);
+                float bl = xr16(b.getShort(i + 4) & 0xffff);
+                int a = (b.getShort(i + 6) & 0xffff) / 257;
+                return (a << 24) | ((int) Math.min(255, Math.max(0, r * 255f)) << 16)
+                        | ((int) Math.min(255, Math.max(0, g * 255f)) << 8)
+                        | (int) Math.min(255, Math.max(0, bl * 255f));
             }
             case 105: {
                 float r = b.getFloat(i);
@@ -864,9 +876,9 @@ final class CaCompositor {
                             colB *= colA;
                         }
                         int dstPixel = buf.getInt(index);
-                        float dr = ((dstPixel >> 16) & 0xff) / 255f;
+                        float dr = (dstPixel & 0xff) / 255f;
                         float dg = ((dstPixel >> 8) & 0xff) / 255f;
-                        float db = (dstPixel & 0xff) / 255f;
+                        float db = ((dstPixel >> 16) & 0xff) / 255f;
                         float da = ((dstPixel >> 24) & 0xff) / 255f;
                         float invA = 1f - colA;
                         float orr = colR + dr * invA;
