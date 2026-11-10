@@ -190,7 +190,7 @@ index 2835d6a..aeef74d 100644
  IOReturn
  SweetGPUUserClient::externalMethod(uint32_t selector, IOExternalMethodArguments *args,
      IOExternalMethodDispatch *dispatch, OSObject *target, void *reference)
-@@ -92,6 +251,116 @@ SweetGPUUserClient::externalMethod(uint32_t selector, IOExternalMethodArguments
+@@ -92,6 +251,117 @@ SweetGPUUserClient::externalMethod(uint32_t selector, IOExternalMethodArguments
  	if (args == NULL) {
  		return kIOReturnBadArgument;
  	}
