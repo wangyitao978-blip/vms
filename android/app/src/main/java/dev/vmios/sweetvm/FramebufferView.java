@@ -7,7 +7,6 @@ import android.graphics.Color;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
-import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -20,7 +19,8 @@ public final class FramebufferView extends View {
     private Bitmap front;
     private Bitmap back;
     private boolean hasFrame;
-    private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    // Draw at the bitmap's intrinsic pixel size; never resample the guest image.
+    private final Paint paint = new Paint(0);
     {
         // The guest framebuffer's byte order is RGBA while Android ARGB_8888
         // consumes BGRA bytes on little-endian devices. Swap only R/B at the
@@ -33,7 +33,6 @@ public final class FramebufferView extends View {
         });
         paint.setColorFilter(new ColorMatrixColorFilter(rbSwap));
     }
-    private final RectF dst = new RectF();
 
     public interface TouchListener {
         /** type: 0 up, 1 down, 2 move; x/y in the 1125x2436 guest panel. */
@@ -55,8 +54,8 @@ public final class FramebufferView extends View {
         }
         // The guest image is centered at native pixel size: one Android
         // canvas pixel maps to one guest framebuffer pixel.
-        float left = (w - Payload.FB_W) / 2f;
-        float top = (h - Payload.FB_H) / 2f;
+        int left = (w - Payload.FB_W) / 2;
+        int top = (h - Payload.FB_H) / 2;
         float gx = e.getX() - left;
         float gy = e.getY() - top;
         if (gx < 0 || gy < 0 || gx >= Payload.FB_W || gy >= Payload.FB_H) {
@@ -131,8 +130,8 @@ public final class FramebufferView extends View {
             // The remaining physical display area is opaque black.
             float left = (w - Payload.FB_W) / 2f;
             float top = (h - Payload.FB_H) / 2f;
-            dst.set(left, top, left + Payload.FB_W, top + Payload.FB_H);
-            canvas.drawBitmap(front, null, dst, paint);
+            // x/y overload preserves the bitmap's intrinsic width and height.
+            canvas.drawBitmap(front, left, top, paint);
         }
     }
 }
