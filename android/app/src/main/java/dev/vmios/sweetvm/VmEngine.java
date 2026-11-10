@@ -58,6 +58,41 @@ public final class VmEngine {
         return running;
     }
 
+    private long cpuSampleTicks = -1;
+    private long cpuSampleTimeMs;
+
+    /** Approximate QEMU process CPU usage; values above 100% mean multiple cores. */
+    public synchronized double cpuUsagePercent() {
+        Process p = process;
+        if (p == null || !p.isAlive()) {
+            cpuSampleTicks = -1;
+            return 0.0;
+        }
+        try {
+            String stat;
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.FileReader("/proc/" + p.pid() + "/stat"))) {
+                stat = reader.readLine();
+            }
+            if (stat == null) return 0.0;
+            int end = stat.lastIndexOf(')');
+            if (end < 0 || end + 2 >= stat.length()) return 0.0;
+            String[] fields = stat.substring(end + 2).trim().split("\\s+");
+            // The substring starts at Linux field 3 (state); utime/stime are 14/15.
+            long ticks = Long.parseLong(fields[11]) + Long.parseLong(fields[12]);
+            long now = android.os.SystemClock.elapsedRealtime();
+            double result = 0.0;
+            if (cpuSampleTicks >= 0 && now > cpuSampleTimeMs) {
+                result = (ticks - cpuSampleTicks) * 1000.0 / (now - cpuSampleTimeMs);
+            }
+            cpuSampleTicks = ticks;
+            cpuSampleTimeMs = now;
+            return Math.max(0.0, result);
+        } catch (Exception ignored) {
+            return 0.0;
+        }
+    }
+
     public long frames() {
         return frames;
     }
