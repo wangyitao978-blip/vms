@@ -186,18 +186,16 @@ public final class MainActivity extends Activity {
     private void setVmSystemBars(boolean vm) {
         int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
         if (vm) {
-            flags |= View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    | View.SYSTEM_UI_FLAG_FULLSCREEN
-                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+            // Hide only the Android status bar. Keep system navigation available.
+            flags |= View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN;
         }
         getWindow().getDecorView().setSystemUiVisibility(flags);
         if (Build.VERSION.SDK_INT >= 30) {
             android.view.WindowInsetsController c = getWindow().getInsetsController();
             if (c != null) {
                 if (vm) {
-                    c.hide(android.view.WindowInsets.Type.statusBars()
-                            | android.view.WindowInsets.Type.navigationBars());
+                    c.hide(android.view.WindowInsets.Type.statusBars());
+                    c.show(android.view.WindowInsets.Type.navigationBars());
                     c.setSystemBarsBehavior(android.view.WindowInsetsController
                             .BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
                 } else {
@@ -809,9 +807,9 @@ public final class MainActivity extends Activity {
     }
 
     private void showVmScreen() {
-        // Keep Android system navigation available; the VM surface has no
-        // in-app overlay controls. Use Android Back to open the stop dialog.
-        setVmSystemBars(false);
+        // Immersive status bar; keep Android navigation available. The VM
+        // surface has no in-app overlay controls. Use Android Back to stop.
+        setVmSystemBars(true);
         clearRoot();
 
         FrameLayout root = new FrameLayout(this);
