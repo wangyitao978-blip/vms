@@ -840,9 +840,10 @@ public final class MainActivity extends Activity {
                 t.send(type, x, y);
             }
         });
-        // Let FramebufferView fit the guest framebuffer to the actual display size.
+        // The guest panel occupies a fixed 1125 x 2436 Android-pixel rectangle.
+        // Center that exact-size View in the full black display; never fit or stretch it.
         FrameLayout.LayoutParams fbLp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+                1125, 2436, Gravity.CENTER);
         root.addView(fbView, fbLp);
 
         LinearLayout metrics = new LinearLayout(this);
