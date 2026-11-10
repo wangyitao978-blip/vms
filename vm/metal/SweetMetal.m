@@ -2221,6 +2221,7 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 	if (bytes == 0 || need == 0) {
 		return;
 	}
+	tex_rendered = 0;
 	if (tex_surface_ref != 0) {
 		[self releaseRenderSurface];
 	} else if (tex_pixels != 0) {
@@ -2339,6 +2340,10 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 		return -1;
 	}
 	if (tex_surface_ref != 0 && tex_pixels != 0) {
+		return 0;
+	}
+	if (tex_surface_ref == 0 && tex_pixels != 0 &&
+	    tex_bpr == tex_width * 4) {
 		return 0;
 	}
 	if (tex_surface_ref != 0) {
