@@ -25,4 +25,4 @@ No source code has yet been ported in this branch. Record actual commits and run
 
 
 ## Workflow correction commits
-- Payload: push trigger now listens to `payload` only; manual dispatch requires an explicit `xnu_run_id` (removed stale default `42853907291` and the `workflow_run` shortcut). This makes the selected kernel run explicit and prevents silent stale-kernel packaging. Workflow commit `4044d46a89aeb01c102b933a1aeaaa5c4c74f305`. Build not yet verified.
+- Payload: dispatch-only workflow; removed push/workflow_run triggers because they cannot safely supply a matching XNU run ID. Manual dispatch requires explicit `xnu_run_id`; removed stale default `42853907291`. Workflow commits `4044d46a89aeb01c102b933a1aeaaa5c4c74f305` (initial branch/input correction) and `8d241a27785c7ae50a909e66c83e42360eb7a8b9` (dispatch-only safety correction). No payload build dispatched yet.
