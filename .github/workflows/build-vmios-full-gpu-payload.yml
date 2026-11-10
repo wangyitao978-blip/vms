@@ -43,10 +43,24 @@ jobs:
           XNU_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.xnu_run_id || '42853907291' }}
         run: |
           set -euo pipefail
-          gh run download "$XNU_RUN_ID" \
-            --repo "$GITHUB_REPOSITORY" \
-            --name xnu-kernel \
-            --dir /tmp/upstream
+          # A push can start this workflow while the matching XNU run is
+          # still uploading its artifact. Wait for that exact run instead of
+          # failing immediately and leaving a stale payload as the only build.
+          downloaded=0
+          for attempt in $(seq 1 30); do
+            rm -rf /tmp/upstream
+            mkdir -p /tmp/upstream
+            if gh run download "$XNU_RUN_ID" \
+              --repo "$GITHUB_REPOSITORY" \
+              --name xnu-kernel \
+              --dir /tmp/upstream; then
+              downloaded=1
+              break
+            fi
+            echo "XNU artifact not ready (attempt $attempt/30); retrying in 10s"
+            sleep 10
+          done
+          test "$downloaded" = 1
           test -s /tmp/upstream/kernel.development.sweet
           # Keep the kernel's SMC #0 instruction: VmEngine configures QEMU's
           # PSCI conduit to SMC over QMP before continuing the paused VM.
