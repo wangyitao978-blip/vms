@@ -26,3 +26,5 @@ No source code has yet been ported in this branch. Record actual commits and run
 
 ## Workflow correction commits
 - XNU: push trigger now listens to `xun` instead of `main`; commit `be6516ea6a4bffe36076eca956c5e55b7965fbd0`. The push is expected to start the XNU build; verify its run and artifacts before using it.
+
+- Branch build triggered by XNU workflow correction: run `42900388186`, head `be6516ea6a4bffe36076eca956c5e55b7965fbd0`, in progress at verification. URL: https://github.com/wangyitao978-blip/vms/actions/runs/42900388186. This is a workflow correction build, not proof that the kernel patch is included or the device issue is fixed.
