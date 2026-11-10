@@ -101,7 +101,7 @@ jobs:
           python3 tools/gpu-bundle.py list dist/host-raster/SweetMetalAccel.sgb
 
           python3 tools/mkadt.py dist/host-raster/qemu-gpu.adt \
-            --qemu --qemu-cpus 4 \
+            --qemu --qemu-cpus 6 \
             --gpu-wire \
             --canvas-width 1125 --canvas-height 2436 \
             --gpu-bundle dist/host-raster/SweetMetalAccel.sgb
@@ -148,7 +148,7 @@ jobs:
           python3 tools/gpu-bundle.py list dist/guest-local-raster/SweetMetalAccel.sgb
 
           python3 tools/mkadt.py dist/guest-local-raster/qemu-gpu.adt \
-            --qemu --qemu-cpus 4 \
+            --qemu --qemu-cpus 6 \
             --gpu-wire \
             --canvas-width 1125 --canvas-height 2436 \
             --gpu-bundle dist/guest-local-raster/SweetMetalAccel.sgb

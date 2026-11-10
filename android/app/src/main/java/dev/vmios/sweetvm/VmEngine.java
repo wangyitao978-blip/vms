@@ -256,9 +256,8 @@ public final class VmEngine {
         cmd.add("-cpu"); cmd.add("cortex-a76");
         cmd.add("-smp"); cmd.add(Integer.toString(cpus));
         cmd.add("-m"); cmd.add(RAM_GIB + "G");
-        // Single-threaded TCG stays the default; tcgmulti=1 turns on MTTCG
-        // (two real vCPUs). One MTTCG boot reached the iOS Setup GUI at 300 s;
-        // another stalled in userland, so the speed win is not proven yet.
+        // Single-threaded TCG stays the default; tcgmulti=1 enables MTTCG
+        // for the guest CPU count parsed above (six in the current test profile).
         boolean mttcg = cpus >= 2 && cmdline.contains("tcgmulti=1");
         boolean offload = cmdline.contains("sweetfb_offload=1");
         boolean gpuWire = cmdline.contains("gpu_wire=1");

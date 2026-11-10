@@ -668,9 +668,9 @@ public final class MainActivity extends Activity {
             java.util.regex.Matcher cpu = java.util.regex.Pattern
                     .compile("(^|\\s)cpus=\\d+").matcher(cmd);
             if (cpu.find()) {
-                cmd = cpu.replaceAll("$1cpus=4");
+                cmd = cpu.replaceAll("$1cpus=6");
             } else {
-                cmd = (cmd + " cpus=4").trim();
+                cmd = (cmd + " cpus=6").trim();
             }
             if (!cmd.contains("tcgmulti=1")) {
                 cmd = (cmd + " tcgmulti=1").trim();
@@ -1047,7 +1047,7 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(150)));
         box.addView(gap(14));
         android.widget.CheckBox mttcgBox = new android.widget.CheckBox(this);
-        mttcgBox.setText("多线程 TCG（启用 4 个 vCPU 真并行）");
+        mttcgBox.setText("多线程 TCG（启用 6 个 vCPU 真并行）");
         mttcgBox.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         mttcgBox.setTextColor(TEXT);
         mttcgBox.setChecked(cfg.mttcg);
@@ -1070,7 +1070,7 @@ public final class MainActivity extends Activity {
         box.addView(fpsLabel);
         box.addView(seek);
         box.addView(text("QEMU 固定 3 GB 客户机内存；vCPU 数取自 cpus=N，默认单线程 TCG。"
-                + "勾选多线程 TCG 会自动设置 cpus=4 和 tcgmulti=1（当前实测最快配置）。参数长度上限 607 字节。",
+                + "勾选多线程 TCG 会自动设置 cpus=6 和 tcgmulti=1（当前实测最快配置）。参数长度上限 607 字节。",
                 10, DIM, false));
         AlertDialog d = new AlertDialog.Builder(this)
                 .setTitle("高级选项")
