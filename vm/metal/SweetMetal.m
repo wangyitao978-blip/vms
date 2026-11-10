@@ -51,6 +51,7 @@ void *calloc(unsigned long count, unsigned long size);
 void *memcpy(void *dst, const void *src, unsigned long n);
 void bzero(void *dst, unsigned long n);
 int mincore(void *addr, unsigned long length, char *vec);
+int getpagesize(void);
 SEL sel_registerName(const char *name);
 const char *sel_getName(SEL sel);
 const char *protocol_getName(id protocol);
@@ -591,8 +592,21 @@ sweet_iosurface_metal_format(unsigned int fourcc, unsigned long fallback)
 		return 80; /* MTLPixelFormatBGRA8Unorm */
 	case 0x52474241u: /* 'RGBA' */
 		return 70; /* MTLPixelFormatRGBA8Unorm */
-	default:
+	default: {
+		static unsigned int unknown_format_logged;
+		if (!unknown_format_logged) {
+			unknown_format_logged = 1;
+			if (console_fd < 0) {
+				console_fd = open("/dev/console", 1 /* O_WRONLY */);
+			}
+			if (console_fd >= 0) {
+				dprintf(console_fd,
+				    "SWEETMETAL: unknown IOSurface FourCC=0x%08x fallback=%lu\\n",
+				    fourcc, fallback);
+			}
+		}
 		return fallback;
+	}
 	}
 }
 
@@ -1327,7 +1341,9 @@ sweet_probe_images(void *context)
 			    base, base - 0x188284000UL);
 		}
 	}
-	sweet_probe_panel();
+	if (sweet_verbose) {
+		sweet_probe_panel();
+	}
 	sweet_probe_ui();
 	sweet_probe_display();
 }
@@ -2044,7 +2060,7 @@ sweet_readable_extent(const void *pointer, unsigned long want)
 {
 	unsigned long long address = (unsigned long long)(unsigned long)pointer;
 	unsigned long got = 0;
-	const unsigned long page = 4096;
+	const unsigned long page = (unsigned long)getpagesize();
 	if (pointer == 0) {
 		return 0;
 	}
@@ -3238,11 +3254,14 @@ sweet_texture_surface(id texture)
 			 * render target: decode its native format and actual row stride.
 			 */
 			if (src_mapped) {
-				r.tex_fmt_px = sweet_iosurface_metal_format(
-				    src_map.pixel_format, r.tex_fmt_px);
-				r.tex_w = src_map.width;
-				r.tex_h = src_map.height;
-				r.tex_bpr = src_map.bytes_per_row;
+				/* Surface format is authoritative for cross-process memory. */
+				unsigned long fmt = sweet_iosurface_metal_format(
+				    src_map.pixel_format, 0);
+				if (fmt != 0) r.tex_fmt_px = fmt;
+				/* A texture may be a sub-rectangle of a larger atlas. */
+				if (r.tex_w == 0) r.tex_w = src_map.width;
+				if (r.tex_h == 0) r.tex_h = src_map.height;
+				if (r.tex_bpr == 0) r.tex_bpr = src_map.bytes_per_row;
 			}
 			r.tex_internal = 0;
 			if (!r.tex_internal && ((BOOL (*)(id, SEL, Class))objc_msgSend)(
