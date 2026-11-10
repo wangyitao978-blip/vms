@@ -51,6 +51,7 @@ void *calloc(unsigned long count, unsigned long size);
 void *memcpy(void *dst, const void *src, unsigned long n);
 void bzero(void *dst, unsigned long n);
 int mincore(void *addr, unsigned long length, char *vec);
+int getpagesize(void);
 SEL sel_registerName(const char *name);
 const char *sel_getName(SEL sel);
 const char *protocol_getName(id protocol);
@@ -563,6 +564,7 @@ typedef struct {
 	unsigned int seed;
 	unsigned char *base;
 	unsigned long width, height, bytes_per_row;
+	unsigned int pixel_format;
 } SweetSurfaceMapping;
 
 static void sweet_surface_unmap(SweetSurfaceMapping *mapping);
@@ -577,6 +579,37 @@ sweet_iosurface_symbol(const char *name)
 	}
 	return sweet_iosurface_library != 0 ?
 	    dlsym(sweet_iosurface_library, name) : 0;
+}
+
+/*
+ * IOSurfaceGetPixelFormat returns an OSType FourCC, not an MTLPixelFormat.
+ * Translate the common packed 8-bit formats before using it in the rasterizer;
+ * for other formats retain the texture object's Metal format.
+ */
+static unsigned long
+sweet_iosurface_metal_format(unsigned int fourcc, unsigned long fallback)
+{
+	switch (fourcc) {
+	case 0x42475241u: /* 'BGRA' */
+		return 80; /* MTLPixelFormatBGRA8Unorm */
+	case 0x52474241u: /* 'RGBA' */
+		return 70; /* MTLPixelFormatRGBA8Unorm */
+	default: {
+		static unsigned int unknown_format_logged;
+		if (!unknown_format_logged) {
+			unknown_format_logged = 1;
+			if (console_fd < 0) {
+				console_fd = open("/dev/console", 1 /* O_WRONLY */);
+			}
+			if (console_fd >= 0) {
+				dprintf(console_fd,
+				    "SWEETMETAL: unknown IOSurface FourCC=0x%08x fallback=%lu\n",
+				    fourcc, fallback);
+			}
+		}
+		return fallback;
+	}
+	}
 }
 
 static int
@@ -598,8 +631,10 @@ sweet_surface_map(unsigned int identifier, SweetSurfaceMapping *mapping)
 	    sweet_iosurface_symbol("IOSurfaceGetHeight");
 	unsigned long (*bpr)(id) = (unsigned long (*)(id))
 	    sweet_iosurface_symbol("IOSurfaceGetBytesPerRow");
+	unsigned int (*pixel_format)(id) = (unsigned int (*)(id))
+	    sweet_iosurface_symbol("IOSurfaceGetPixelFormat");
 	if (lookup == 0 || lock == 0 || base == 0 || width == 0 || height == 0 ||
-	    bpr == 0) {
+	    bpr == 0 || pixel_format == 0) {
 		return -1;
 	}
 	id surface = lookup(identifier);
@@ -619,6 +654,7 @@ sweet_surface_map(unsigned int identifier, SweetSurfaceMapping *mapping)
 	mapping->width = width(surface);
 	mapping->height = height(surface);
 	mapping->bytes_per_row = bpr(surface);
+	mapping->pixel_format = pixel_format(surface);
 	if (mapping->base == 0) {
 		sweet_surface_unmap(mapping);
 		return -1;
@@ -707,6 +743,7 @@ typedef struct {
 	unsigned int id;
 	unsigned int first_lo, first_hi;
 	unsigned int alloc_lo, alloc_hi;
+	unsigned int failed;
 } SweetCAHostMap;
 
 static SweetCAHostMap sweet_ca_maps[SWEET_CA_MAP_SLOTS];
@@ -717,7 +754,8 @@ static unsigned int sweet_ca_pending;
 static unsigned int sweet_ca_submitted;
 static unsigned int sweet_ca_local;
 static unsigned int sweet_ca_flushes;
-static unsigned int sweet_ca_failures;
+static unsigned int sweet_ca_map_failures;
+static unsigned int sweet_ca_tx_failures;
 static unsigned int sweet_ca_disabled;
 static unsigned int sweet_ca_logs;
 static volatile int sweet_ca_gate;
@@ -749,25 +787,36 @@ sweet_ca_map(unsigned int identifier)
 	}
 	for (unsigned int i = 0; i < SWEET_CA_MAP_SLOTS; i++) {
 		if (sweet_ca_maps[i].id == identifier) {
-			return 1;
+			return sweet_ca_maps[i].failed == 0;
 		}
 	}
 	unsigned int input = identifier;
 	unsigned int output[6];
+	bzero(output, sizeof(output));
 	unsigned long output_size = sizeof(output);
 	int result = IOConnectCallStructMethod(sweet_accel_port, 0x104, &input,
 	    sizeof(input), output, &output_size);
 	if (result != 0 || output_size < sizeof(output) || output[0] == 0) {
-		if (sweet_ca_logs < 8) {
+		SweetCAHostMap *entry = &sweet_ca_maps[sweet_ca_map_next++ %
+		    SWEET_CA_MAP_SLOTS];
+		bzero(entry, sizeof(*entry));
+		entry->id = identifier;
+		entry->failed = 1;
+		/* A bad surface is isolated by its failed cache entry. Do not
+		 * disable host rasterization for unrelated surfaces. */
+		sweet_ca_map_failures++;
+		if (sweet_ca_logs < 16) {
 			sweet_ca_logs++;
 			dprintf(console_fd,
-			    "SWEETMETAL: host map %u failed 0x%x%c", identifier,
-			    result, 10);
+			    "SWEETMETAL: host map %u failed rc=0x%x reply=%u bytes=%lu failures=%u disabled=%u%c",
+			    identifier, result, output_size >= sizeof(output) ? output[0] : 0,
+			    output_size, sweet_ca_map_failures, sweet_ca_disabled, 10);
 		}
 		return 0;
 	}
 	SweetCAHostMap *entry = &sweet_ca_maps[sweet_ca_map_next++ %
 	    SWEET_CA_MAP_SLOTS];
+	bzero(entry, sizeof(*entry));
 	entry->id = identifier;
 	entry->first_lo = output[4];
 	entry->first_hi = output[5];
@@ -917,12 +966,13 @@ sweet_ca_send(const void *payload, unsigned long bytes)
 	    8 + bytes, 0, &output_size);
 	sweet_ca_leave();
 	if (result != 0) {
-		sweet_ca_failures++;
-		if (sweet_ca_failures > 2) {
+		sweet_ca_tx_failures++;
+		if (sweet_ca_tx_failures >= 3) {
 			sweet_ca_disabled = 1;
 		}
 		return -1;
 	}
+	sweet_ca_tx_failures = 0;
 	sweet_ca_pending++;
 	return 0;
 }
@@ -970,8 +1020,8 @@ sweet_ca_flush(void)
 		    sweet_ticks_ms(mach_absolute_time() - flush_t0), 10);
 	}
 	if (result != 0) {
-		sweet_ca_failures++;
-		if (sweet_ca_failures > 2) {
+		sweet_ca_tx_failures++;
+		if (sweet_ca_tx_failures >= 3) {
 			sweet_ca_disabled = 1;
 		}
 		if (sweet_ca_logs < 16) {
@@ -980,6 +1030,8 @@ sweet_ca_flush(void)
 			    "SWEETMETAL: host flush seq %u failed 0x%x%c",
 			    sequence, result, 10);
 		}
+	} else {
+		sweet_ca_tx_failures = 0;
 	}
 	sweet_ca_pending = 0;
 	bzero(sweet_ca_maps, sizeof(sweet_ca_maps));
@@ -1304,7 +1356,9 @@ sweet_probe_images(void *context)
 			    base, base - 0x188284000UL);
 		}
 	}
-	sweet_probe_panel();
+	if (sweet_verbose) {
+		sweet_probe_panel();
+	}
 	sweet_probe_ui();
 	sweet_probe_display();
 }
@@ -2025,7 +2079,7 @@ sweet_readable_extent(const void *pointer, unsigned long want)
 {
 	unsigned long long address = (unsigned long long)(unsigned long)pointer;
 	unsigned long got = 0;
-	const unsigned long page = 4096;
+	const unsigned long page = (unsigned long)getpagesize();
 	if (pointer == 0) {
 		return 0;
 	}
@@ -2460,6 +2514,7 @@ typedef struct {
 	id tex_owner;
 	unsigned long blend_fn, tex_fn, dst_fn, img_count;
 	unsigned char *dst;
+	int dst_bgra;
 	unsigned long dst_w, dst_h, dst_bpr;
 	int clip_x0, clip_y0, clip_x1, clip_y1;
 	int dbg_n;
@@ -2584,10 +2639,21 @@ sweet_decode_texel(unsigned long fmt, const unsigned char *p, float t[4])
 	}
 	case 552: case 553: {
 		const unsigned short *h = (const unsigned short *)p;
-		t[0] = sweet_xr16(h[0]);
+		/* BGRA component order in memory; convert to canonical RGBA. */
+		t[0] = sweet_xr16(h[2]);
 		t[1] = sweet_xr16(h[1]);
-		t[2] = sweet_xr16(h[2]);
-		t[3] = (float)h[3] / 65535.0f;
+		t[2] = sweet_xr16(h[0]);
+		t[3] = sweet_xr16(h[3]);
+		break;
+	}
+	case 554: case 555: {
+		/* BGR10_XR: B/G/R occupy bits 0..9/10..19/20..29.
+		 * The upper two bits are padding, not an alpha channel. */
+		unsigned int raw = *(const unsigned int *)p;
+		t[0] = sweet_xr10((raw >> 20) & 0x3ff);
+		t[1] = sweet_xr10((raw >> 10) & 0x3ff);
+		t[2] = sweet_xr10(raw & 0x3ff);
+		t[3] = 1.0f;
 		break;
 	}
 	case 105: {
@@ -2743,9 +2809,10 @@ sweet_blend_pixel(SweetRaster *r, int x, int y, const float col[4])
 	}
 	if (a > 1.0f) a = 1.0f;
 	float sr = col[0] * a, sg = col[1] * a, sb = col[2] * a;
-	float dr = (float)p[0] / 255.0f;
+	/* Screen-sized staging is BGRA; heap render targets are RGBA. */
+	float dr = (float)p[r->dst_bgra ? 2 : 0] / 255.0f;
 	float dg = (float)p[1] / 255.0f;
-	float db = (float)p[2] / 255.0f;
+	float db = (float)p[r->dst_bgra ? 0 : 2] / 255.0f;
 	float da = (float)p[3] / 255.0f;
 	float inv = 1.0f - a;
 	float orr = sr + dr * inv;
@@ -2764,9 +2831,9 @@ sweet_blend_pixel(SweetRaster *r, int x, int y, const float col[4])
 		ob = sb * l4 + db * (1.0f - a * l4);
 		oa = a * l4 + da * (1.0f - a * l4);
 	}
-	p[0] = (unsigned char)(orr > 1.0f ? 255.0f : orr * 255.0f);
+	p[r->dst_bgra ? 2 : 0] = (unsigned char)(orr > 1.0f ? 255.0f : orr * 255.0f);
 	p[1] = (unsigned char)(og > 1.0f ? 255.0f : og * 255.0f);
-	p[2] = (unsigned char)(ob > 1.0f ? 255.0f : ob * 255.0f);
+	p[r->dst_bgra ? 0 : 2] = (unsigned char)(ob > 1.0f ? 255.0f : ob * 255.0f);
 	p[3] = (unsigned char)(oa > 1.0f ? 255.0f : oa * 255.0f);
 }
 
@@ -2953,7 +3020,7 @@ typedef struct {
 	id enc_tex[8];
 	id enc_ib;
 	unsigned long enc_iboff;
-	unsigned char enc_vbytes[8][256];
+	unsigned char enc_vbytes[8][4096];
 	unsigned long enc_vblen[8];
 	unsigned char enc_fbytes[8][256];
 	unsigned long enc_fblen[8];
@@ -3125,7 +3192,7 @@ typedef struct {
     atIndex:(unsigned long)index
 {
 	if (index < 8 && bytes != 0) {
-		unsigned long n = length < 256 ? length : 256;
+		unsigned long n = length < 4096 ? length : 4096;
 		memcpy(enc_vbytes[index], bytes, n);
 		enc_vblen[index] = n;
 		dprintf(console_fd, "SWEETMETAL: vbytes[%lu] len=%lu", index, length);
@@ -3305,7 +3372,7 @@ sweet_texture_surface(id texture)
 		unsigned long vbuf = ((unsigned long (*)(id, SEL, unsigned long))
 		    objc_msgSend)(enc_pipeline,
 		    sel_registerName("attributeBuffer:"), 0);
-		if (vbuf >= 8 || enc_vb[vbuf] == 0) {
+		if (vbuf >= 8 || (enc_vb[vbuf] == 0 && enc_vblen[vbuf] == 0)) {
 			vbuf = 1;
 		}
 		unsigned long stride = ((unsigned long (*)(id, SEL, unsigned long))
@@ -3370,6 +3437,10 @@ sweet_texture_surface(id texture)
 				r.vb = (const unsigned char *)vc + vo;
 				r.vb_len = vl - vo;
 			}
+		} else if (enc_vblen[vbuf] != 0) {
+			/* setVertexBytes is an inline vertex buffer binding. */
+			r.vb = enc_vbytes[vbuf];
+			r.vb_len = enc_vblen[vbuf];
 		}
 		for (unsigned int i = 0; i < 8 && r.tex == 0; i++) {
 			if (enc_tex[i] == 0 || enc_tex[i] == enc_target_tex) {
@@ -3409,20 +3480,27 @@ sweet_texture_surface(id texture)
 			r.tex_bpr = ((unsigned long (*)(id, SEL))objc_msgSend)(enc_tex[i],
 			    sel_registerName("bytesPerRow"));
 			r.tex_surface = sid;
-			/* Uploaded pixels keep their declared format; IOSurface memory
-			 * this process renders into, and offscreen targets it has
-			 * rendered, are RGBA8 whatever the format says. */
+			/*
+			 * IOSurface's own pixel format is authoritative for cross-process
+			 * memory. A mapped surface is not automatically our private RGBA8
+			 * render target: decode its native format and actual row stride.
+			 */
+			if (src_mapped) {
+				/* Surface format is authoritative for cross-process memory. */
+				unsigned long fmt = sweet_iosurface_metal_format(
+				    src_map.pixel_format, 0);
+				if (fmt != 0) r.tex_fmt_px = fmt;
+				/* A texture may be a sub-rectangle of a larger atlas. */
+				if (r.tex_w == 0) r.tex_w = src_map.width;
+				if (r.tex_h == 0) r.tex_h = src_map.height;
+				if (r.tex_bpr == 0) r.tex_bpr = src_map.bytes_per_row;
+			}
 			r.tex_internal = 0;
 			if (((BOOL (*)(id, SEL, Class))objc_msgSend)(enc_tex[i],
 			    sel_registerName("isKindOfClass:"),
 			    objc_getClass("SweetTexture"))) {
 				r.tex_internal = ((unsigned long (*)(id, SEL))objc_msgSend)(
 				    enc_tex[i], sel_registerName("rendered")) != 0;
-			}
-			if (src_mapped) {
-				if (r.tex_w == 0) r.tex_w = src_map.width;
-				if (r.tex_h == 0) r.tex_h = src_map.height;
-				if (r.tex_bpr == 0) r.tex_bpr = src_map.bytes_per_row;
 			}
 		}
 		r.dst = enc_map.base;
@@ -3451,6 +3529,7 @@ sweet_texture_surface(id texture)
 		    sweet_stage_ensure((unsigned long)r.dst_w, (unsigned long)r.dst_h,
 		        (unsigned long)r.dst_bpr)) {
 			r.dst = sweet_stage_base;
+			r.dst_bgra = 1; /* sweet_stage_ensure creates IOSurface BGRA */
 			r.dst_w = sweet_stage_w;
 			r.dst_h = sweet_stage_h;
 			r.dst_bpr = sweet_stage_bpr;
@@ -3542,6 +3621,34 @@ sweet_texture_surface(id texture)
 					n = count;
 				}
 				const unsigned char *ip = (const unsigned char *)ic + index_offset;
+				unsigned int expanded[4096 * 3];
+				if (type == 4) {
+					/* Metal triangle strips alternate winding to keep a consistent
+					 * front face. Expand once so host and local rasterizers agree. */
+					if (n < 3) n = 0;
+					unsigned long triangles = n > 2 ? n - 2 : 0;
+					for (unsigned long i = 2; i < n; i++) {
+						unsigned long j = (i - 2) * 3;
+						unsigned long a = index_type == 0 ?
+						    ((const unsigned short *)ip)[i - 2] :
+						    ((const unsigned int *)ip)[i - 2];
+						unsigned long b = index_type == 0 ?
+						    ((const unsigned short *)ip)[i - 1] :
+						    ((const unsigned int *)ip)[i - 1];
+						unsigned long c = index_type == 0 ?
+						    ((const unsigned short *)ip)[i] :
+						    ((const unsigned int *)ip)[i];
+						expanded[j] = (unsigned int)((i & 1) ? b : a);
+						expanded[j + 1] = (unsigned int)((i & 1) ? a : b);
+						expanded[j + 2] = (unsigned int)c;
+					}
+					n = triangles * 3;
+					ip = (const unsigned char *)expanded;
+					index_type = 1;
+				} else if (type != 3) {
+					/* Lines and points are not implemented by this rasterizer. */
+					n = 0;
+				}
 				int submitted = 0;
 				if (host_ok) {
 					submitted = sweet_ca_batch(&r, host_surface, ip, n,

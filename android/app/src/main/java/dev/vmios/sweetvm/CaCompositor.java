@@ -699,31 +699,27 @@ final class CaCompositor {
                 return pack(r, g, bl, 1f);
             }
             /*
-             * The 554/555 wire formats are the alpha-bearing packed 10-bit
-             * variants used by the IOSurface compositor.  They share the
-             * little-endian R10:G10:B10 layout of 550/551, with the top two
-             * bits carrying A2.  Falling through to the BGRA8 default turns
-             * full-screen XR surfaces into the red/black bands seen on the
-             * device.
+             * BGR10_XR is a packed 32-bit B:G:R format. Bits 30-31 are
+             * padding, not alpha; sampled alpha is therefore opaque.
              */
             case 554:
             case 555: {
                 int raw = b.getInt(i);
-                float r = xr10(raw & 0x3ff);
+                float bl = xr10(raw & 0x3ff);
                 float g = xr10((raw >> 10) & 0x3ff);
-                float bl = xr10((raw >> 20) & 0x3ff);
-                float a = ((raw >>> 30) & 0x3) / 3f;
-                return pack(r, g, bl, a);
+                float r = xr10((raw >> 20) & 0x3ff);
+                return pack(r, g, bl, 1f);
             }
+            /*
+             * BGRA10_XR stores 16-bit components in B,G,R,A order.
+             */
             case 552:
             case 553: {
-                float r = xr16(b.getShort(i) & 0xffff);
+                float bl = xr16(b.getShort(i) & 0xffff);
                 float g = xr16(b.getShort(i + 2) & 0xffff);
-                float bl = xr16(b.getShort(i + 4) & 0xffff);
-                int a = (b.getShort(i + 6) & 0xffff) / 257;
-                return (a << 24) | ((int) Math.min(255, Math.max(0, r * 255f)) << 16)
-                        | ((int) Math.min(255, Math.max(0, g * 255f)) << 8)
-                        | (int) Math.min(255, Math.max(0, bl * 255f));
+                float r = xr16(b.getShort(i + 4) & 0xffff);
+                float a = xr16(b.getShort(i + 6) & 0xffff);
+                return pack(r, g, bl, a);
             }
             case 105: {
                 float r = b.getFloat(i);
@@ -876,9 +872,9 @@ final class CaCompositor {
                             colB *= colA;
                         }
                         int dstPixel = buf.getInt(index);
-                        float dr = (dstPixel & 0xff) / 255f;
+                        float dr = ((dstPixel >> 16) & 0xff) / 255f;
                         float dg = ((dstPixel >> 8) & 0xff) / 255f;
-                        float db = ((dstPixel >> 16) & 0xff) / 255f;
+                        float db = (dstPixel & 0xff) / 255f;
                         float da = ((dstPixel >> 24) & 0xff) / 255f;
                         float invA = 1f - colA;
                         float orr = colR + dr * invA;
