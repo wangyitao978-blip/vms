@@ -20,9 +20,8 @@ Profiles:
            one-command-at-a-time controller the bottleneck".
   sample    timing + the stack sampler, for a boot that stalls in userland.
   vm       vmios (the Android app): cpus=N becomes QEMU's -smp, no rd= (the
-           app appends rd=ufsroot0 itself). 2 vCPUs is what NOTES.md calls
-           stable, but see BOOT_FIXES.md 8.4: -accel tcg,thread=single means the
-           extra vCPU only time-shares one host core.
+           app appends rd=ufsroot0 itself). The current validated profile uses
+           4 CPUs; 6/8-vCPU MTTCG runs have hit the XNU pset0 ticket-lock issue.
   vm-sample  vm + the sampler.
   qemu     Kernel-only boot under QEMU with a ramdisk root (rd=md0), one CPU:
            TCG does not do eight vCPUs usefully.
@@ -61,14 +60,14 @@ DEVICE = " ".join([
 
 TIMING = DEVICE + " sweetts=1 ufsstats=1 ufsstatsecs=5"
 
-# vmios (the Android app): QEMU's -smp comes from cpus=N here, and one vCPU
-# is the reason LaunchServices looks like it hangs; 2 is the stable bring-up
-# choice (6/8 hit the pset0 ticket lock, see NOTES.md). No rd=: the app appends
-# rd=ufsroot0 itself when the command line has none, so keep it out.
+# vmios (the Android app): QEMU's -smp comes from cpus=N here. Four CPUs are
+# the validated MTTCG performance profile; 6/8 have hit the XNU pset0 ticket
+# lock under parallel execution. Keep this count aligned with the ADT and
+# Android's MTTCG override. No rd=: the app appends rd=ufsroot0 itself.
 VM = " ".join([
     "debug=0xc",
     "serial=3",
-    "cpus=2",
+    "cpus=4",
     "keepsyms=1",
     "-noprogress",
     "unentitled_ios_sim_launch=1",
