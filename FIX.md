@@ -43,6 +43,15 @@
 - Payload workflow on a plain push currently falls back to the hard-coded XNU run ID `42853907291`; only a successful XNU `workflow_run` event automatically passes its exact run ID. Do not accept a payload built from a stale kernel as validation of the kernel fix.
 - Build runs started this operation: none at file creation time. Add actual run IDs/URLs and artifact names only after GitHub reports them.
 
+
+### Actual changes committed
+- Created root `FIX.md`: commit `0c729e57375ba90f7a64816fa2818e806fb955a2`.
+- Updated `vm/metal/SweetMetal.m`: commit `0c79ec1034256c7a9621730ad073dfede47f4ef1`.
+- fmt550 probe was already present in the branch; replaced its unsafe tightly-packed 4096-word read with a mapped-only, row-stride-aware probe guarded by a 64x64 readable-extent check. It still emits the first 48 raw words and counts top-two-bit values across all 4096 pixels. It does not touch `sweet_decode_texel`.
+- Confirmed no change to 550/551 decoding, 554/555, or tfn.
+- Confirmed baseline already had IOSurfaceCreate-first allocation (BGRA FourCC) with calloc fallback and mapped-texture priority before the 1 MiB upload fallback; these existing paths were not falsely recorded as new fixes.
+- Payload workflow is expected to start automatically from the `SweetMetal.m` push. Run ID pending; verify it uses the correct XNU kernel before treating it as a valid end-to-end build.
+
 ### Cancellations / reversals
 - Explicitly cancelled: changing 550/551 to BGR10A2Unorm. Do not reintroduce.
 - Leave 554/555 unchanged.
