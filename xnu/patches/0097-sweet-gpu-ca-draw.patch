@@ -190,7 +190,7 @@ index 2835d6a..aeef74d 100644
  IOReturn
  SweetGPUUserClient::externalMethod(uint32_t selector, IOExternalMethodArguments *args,
      IOExternalMethodDispatch *dispatch, OSObject *target, void *reference)
-@@ -92,6 +251,112 @@ SweetGPUUserClient::externalMethod(uint32_t selector, IOExternalMethodArguments
+@@ -92,6 +251,116 @@ SweetGPUUserClient::externalMethod(uint32_t selector, IOExternalMethodArguments
  	if (args == NULL) {
  		return kIOReturnBadArgument;
  	}
@@ -282,7 +282,12 @@ index 2835d6a..aeef74d 100644
 +		uint32_t pages = 0;
 +		addr64_t first = 0;
 +		IOReturn result = kIOReturnNotReady;
-+		if (s->memory != NULL && s->allocSize != 0) {
++		if (s->memory == NULL) {
++			IOLog("SWEET GPU: map %u: no memory alloc %u\\n",
++			    surface, s->allocSize);
++		} else if (s->allocSize == 0) {
++			IOLog("SWEET GPU: map %u: allocSize 0\\n", surface);
++		} else {
 +			result = sweet_surface_send_map(s, surface, &pages, &first);
 +		}
 +		out.ok = result == kIOReturnSuccess ? 1 : 0;
@@ -298,7 +303,7 @@ index 2835d6a..aeef74d 100644
 +			    surface, pages, (uint32_t)s->allocSize, result);
 +		}
 +		s->release();
-+		return kIOReturnSuccess;
++		return result;
 +	}
  	if (selector == kSweetGPUClearSurface) {
  		struct {
