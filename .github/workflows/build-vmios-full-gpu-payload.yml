@@ -5,14 +5,9 @@ on:
     inputs:
       xnu_run_id:
         description: Successful XNU workflow run ID (artifact name xnu-kernel)
-        required: false
-        default: "42853907291"
-  workflow_run:
-    workflows: ["xnu"]
-    types: [completed]
-    branches: [main, fix/render-channel-xr-decoding, fix/mobilegestalt-boot-and-side-controls]
+        required: true
   push:
-    branches: [main, fix/render-channel-xr-decoding, fix/mobilegestalt-boot-and-side-controls]
+    branches: [payload]
     paths:
       - "vm/metal/SweetMetal.m"
       - "vm/metal/Info.plist"
@@ -29,18 +24,18 @@ permissions:
 
 jobs:
   payload:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: true
     runs-on: macos-15
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Download the successful XNU kernel with its SMC PSCI conduit
         env:
           GH_TOKEN: ${{ github.token }}
-          XNU_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.xnu_run_id || '42853907291' }}
+          XNU_RUN_ID: ${{ inputs.xnu_run_id }}
         run: |
           set -euo pipefail
           # A push can start this workflow while the matching XNU run is
