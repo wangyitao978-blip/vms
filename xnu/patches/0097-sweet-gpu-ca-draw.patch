@@ -324,9 +324,9 @@ index 7f90c56..6c448ff 100644
  OSDefineMetaClassAndStructors(SweetSurface, OSObject);
 @@ -80,6 +82,17 @@ SweetSurface::free()
  {
-+	if (OSDynamicCast(IOBufferMemoryDescriptor, memory) != NULL) {
-+		OSAddAtomic64(-(SInt64)allocSize, (volatile SInt64 *)&sweet_surface_wired);
-+	}
+ 	if (OSDynamicCast(IOBufferMemoryDescriptor, memory) != NULL) {
+ 		OSAddAtomic64(-(SInt64)allocSize, (volatile SInt64 *)&sweet_surface_wired);
+ 	}
 +	if (state != NULL) {
 +		uint32_t alive = (uint32_t)OSDecrementAtomic(&sweet_surface_alive_surfaces) - 1;
 +		uint64_t wired = (uint64_t)OSAddAtomic64(0, (volatile SInt64 *)&sweet_surface_wired);
@@ -338,10 +338,8 @@ index 7f90c56..6c448ff 100644
 +			    alive, (unsigned long long)wired, (unsigned long long)peak);
 +		}
 +	}
- 	if (OSDynamicCast(IOBufferMemoryDescriptor, memory) != NULL) {
- 		OSAddAtomic64(-(SInt64)allocSize, (volatile SInt64 *)&sweet_surface_wired);
- 	}
  	OSSafeReleaseNULL(kernelMap);
+ 	OSSafeReleaseNULL(memory);
 @@ -126,8 +138,17 @@ sweet_surface_alloc(void)
  	if (s->state == NULL) {
  		s->release();
