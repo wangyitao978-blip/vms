@@ -38,6 +38,6 @@ android {
     }
 
     androidResources {
-        noCompress += ['bin', 'img']
+        noCompress += ['img']
     }
 }
