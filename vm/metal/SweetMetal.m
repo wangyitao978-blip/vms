@@ -1544,6 +1544,14 @@ __attribute__((objc_root_class))
 
 static id sweet_pipeline_named(id name);
 
+static void
+sweet_log_compute_pso(id function)
+{
+	id name = function != 0 ? sweet_msg_id(function, "name") : 0;
+	dprintf(console_fd, "SWEETMETAL: compute pso %s\n",
+	    name != 0 ? sweet_cstr(name) : "-");
+}
+
 @implementation SweetOpaque
 
 - (id)newFunctionWithName:(id)name
@@ -1652,6 +1660,7 @@ static id sweet_pipeline_named(id name);
 - (id)newComputePipelineStateWithFunction:(id)function error:(id *)error
 {
 	sweet_log("library", "newComputePipelineStateWithFunction:error:");
+	sweet_log_compute_pso(function);
 	return [[SweetOpaque alloc] init];
 }
 
@@ -1787,6 +1796,7 @@ static id sweet_pipeline_named(id name);
 /* Pipeline state with the function/library name, so a draw can be decoded. */
 @interface SweetPipeline : SweetOpaque {
 	char pipe_name[96];
+	char pipe_frag_name[96];
 	unsigned long pipe_attr_format[8];
 	unsigned long pipe_attr_offset[8];
 	unsigned long pipe_attr_buffer[8];
@@ -1795,6 +1805,8 @@ static id sweet_pipeline_named(id name);
 	int pipe_has_fc;
 }
 - (void)setNameC:(const char *)name;
+- (void)setFragNameC:(const char *)name;
+- (const char *)fragNameC;
 - (void)setAttribute:(unsigned long)index format:(unsigned long)format
     offset:(unsigned long)offset buffer:(unsigned long)buffer;
 - (void)setStride:(unsigned long)stride forBuffer:(unsigned long)buffer;
@@ -1818,6 +1830,23 @@ static id sweet_pipeline_named(id name);
 		}
 	}
 	pipe_name[i] = 0;
+}
+
+- (void)setFragNameC:(const char *)name
+{
+	unsigned long i = 0;
+	if (name != 0) {
+		while (name[i] != 0 && i + 1 < sizeof(pipe_frag_name)) {
+			pipe_frag_name[i] = name[i];
+			i++;
+		}
+	}
+	pipe_frag_name[i] = 0;
+}
+
+- (const char *)fragNameC
+{
+	return pipe_frag_name;
 }
 
 - (const char *)nameC
@@ -1903,7 +1932,11 @@ sweet_pipeline_from_descriptor(id descriptor)
 		}
 		id frag = sweet_msg_id(descriptor, "fragmentFunction");
 		if (frag != 0) {
-			dprintf(console_fd, "SWEETMETAL: pso frag %s", sweet_cstr(sweet_msg_id(frag, "name")));
+			id fragname = sweet_msg_id(frag, "name");
+			const char *frag_name = fragname != 0 ? sweet_cstr(fragname) : "-";
+			((void (*)(id, SEL, const char *))objc_msgSend)(state,
+			    sel_registerName("setFragNameC:"), frag_name);
+			dprintf(console_fd, "SWEETMETAL: pso frag %s", frag_name);
 			dprintf(console_fd, "%c", 10);
 			((void (*)(id, SEL, id))objc_msgSend)(state,
 			    sel_registerName("copyConstantsFromFunction:"), frag);
@@ -2498,6 +2531,7 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 
 static unsigned int sweet_encoder_logs;
 static unsigned int sweet_draw_logs;
+static unsigned int sweet_draw_detail_logs;
 static unsigned int sweet_draw_logs5;
 
 /* Render encoder: records the destination surface and the draw inputs so the
@@ -3593,6 +3627,19 @@ sweet_texture_surface(id texture)
 				host_surface = sweet_stage_id;
 			}
 		}
+		if (sweet_draw_detail_logs < 300) {
+			sweet_draw_detail_logs++;
+			const char *frag_name = "-";
+			if (enc_pipeline != 0 &&
+			    ((BOOL (*)(id, SEL, Class))objc_msgSend)(enc_pipeline,
+			    sel_registerName("isKindOfClass:"), objc_getClass("SweetPipeline"))) {
+				frag_name = ((const char *(*)(id, SEL))objc_msgSend)(
+				    enc_pipeline, sel_registerName("fragNameC"));
+			}
+			dprintf(console_fd,
+			    "SWEETMETAL: draw frag=%s dst=%lux%lu tex=%lux%lu tfn=%lu\n",
+			    frag_name, r.dst_w, r.dst_h, r.tex_w, r.tex_h, r.tex_fn);
+		}
 		int host_ok = !sweet_ca_disabled && sweet_accel_port != 0 &&
 		    enc_surface != 0 && r.dst != 0 && r.dst_bpr != 0 &&
 		    host_surface != enc_surface;
@@ -4357,6 +4404,7 @@ struct SweetBlockHeader {
 - (id)newComputePipelineStateWithFunction:(id)function error:(id *)error
 {
 	sweet_log("msg", "newComputePipelineStateWithFunction:error:");
+	sweet_log_compute_pso(function);
 	return [[SweetOpaque alloc] init];
 }
 
@@ -4364,12 +4412,14 @@ struct SweetBlockHeader {
     options:(unsigned long)options reflection:(id *)reflection error:(id *)error
 {
 	sweet_log("msg", "newComputePipelineStateWithDescriptor:options:reflection:error:");
+	sweet_log_compute_pso(sweet_msg_id(descriptor, "computeFunction"));
 	return [[SweetOpaque alloc] init];
 }
 
 - (id)newComputePipelineStateWithDescriptor:(id)descriptor error:(id *)error
 {
 	sweet_log("msg", "newComputePipelineStateWithDescriptor:error:");
+	sweet_log_compute_pso(sweet_msg_id(descriptor, "computeFunction"));
 	return [[SweetOpaque alloc] init];
 }
 
@@ -4377,6 +4427,7 @@ struct SweetBlockHeader {
     reflection:(id *)reflection error:(id *)error
 {
 	sweet_log("msg", "newComputePipelineStateWithFunction:options:reflection:error:");
+	sweet_log_compute_pso(function);
 	return [[SweetOpaque alloc] init];
 }
 
