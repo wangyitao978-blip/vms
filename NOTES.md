@@ -1674,3 +1674,10 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - Replaced launcher artwork with the user-provided black-and-white image for standard, round, and adaptive launcher icon resources.
 - Rewrote README to explain what VMs is, what it can and cannot do, completed work, current limitations, and build/payload status.
 - Important: at this point APK branch still has no bundled payload extraction or workflow injection. Planned bundled source is Host Raster only; Guest Local must not be included.
+
+
+### 2026-11-12 APK Host Raster payload bundling
+- Payload run `43079641260` is the pinned successful Host Raster source (artifact `13882834913`, 12,574,633 bytes); APK CI checks provenance and SHA-256, and injects only the Host Raster payload. Guest Local is explicitly excluded.
+- Added background first-run extraction to `files/vm/sweet-qemu-gpu-payload.bin`, SHA-256 verification, atomic replacement, and `payload.ver` version/hash marker. MainActivity uses this bundled payload by default; it does not silently boot an old manually imported payload.
+- APK workflow verifies that both `assets/boot/sweet-qemu-gpu-payload.bin` and `assets/boot/payload.sha256` exist in the final APK and that the embedded binary hash matches. Payload asset stays compressed (removed `bin` from `noCompress`).
+- Build result pending final CI run; device extraction check remains pending.
