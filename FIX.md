@@ -82,3 +82,10 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Artifacts: `vmios-host-raster-payload` ID `13867657031`; `vmios-guest-local-raster-payload` ID `13868101386`. Run URL: https://github.com/wangyitao978-blip/vms/actions/runs/43047319308 .
 - XNU provenance was validated and embedded: run `43022096198`, branch `xun`, commit `065b5d583c95fe0eaa6f2c74b118f6a8acb1cacd`, kernel SHA-256 `09e963f8e71c7aac0eb6ef0b73be01afdf9b12a616e6edc4cb835fecbac4f534`.
 - Build logs show compiler warnings (including existing CoreFoundation const-qualifier and Objective-C method warnings), but all build and upload steps succeeded. No device runtime verification yet. Install the host-raster payload first for normal host rendering and collect one Control Center ring; guest-local is the comparison/diagnostic variant.
+
+
+## 2026-11-12 final ring12 payload pass
+- Payload branch only; XNU branch `xun`/run #77 remains unchanged. The workflow builds both ADTs with `mkadt.py --qemu --qemu-cpus 3` (the `mkpayload.py` CLI itself has no `--qemu-cpus` option); `tools/bootargs.py` VM profile now uses `debug=0x8`, `cpus=3`, `sweetfb_hz=15`; existing `tlto_us=2000000` and `slto_us=2000000` remain.
+- `sweet_ca_batch` writes `r->tex_fn` to protocol `reserved` (offset 84). Guest local raster treats tex_fn 18/48 as alpha masks (multiplies alpha only); other functions keep RGBA modulation.
+- Removed `draw frag=` and `compute pso` logs; offscreen IOSurface success logs capped at 8; IOSurface creation failures logged once per reason; host flush summary/timeout logs capped to first 8 and every 64th flush. No blur or clear coalescing changes.
+- Payload build is triggered by the branch push; workflow watches `tools/bootargs.py` as well as SweetMetal/workflow changes. XNU #77 is reused; no XNU source/build changes.

@@ -1679,3 +1679,9 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - Run `43047319308` succeeded for `ed0fe416a709b8e7494578362e2339672a0ab9cd`; both artifacts uploaded: host-raster `13867657031`, guest-local `13868101386`.
 - Verified XNU source: run `43022096198`, commit `065b5d583c95fe0eaa6f2c74b118f6a8acb1cacd`; kernel SHA-256 `09e963f8e71c7aac0eb6ef0b73be01afdf9b12a616e6edc4cb835fecbac4f534`.
 - Build passed with compiler warnings; device validation and Control Center compute log capture remain pending. Start with host-raster artifact, then collect ring logs. Do not treat this as blur implementation.
+
+
+### 2026-11-12 ring12 final payload pass
+- 3-vCPU profile: `debug=0x8`, `sweetfb_hz=15`, `tlto_us/slto_us=2000000`; both payload ADT variants use `mkadt.py --qemu-cpus 3`. `mkpayload.py` has no CPU-count flag.
+- CA draw protocol `reserved` carries `tex_fn`; local raster alpha-only handling for functions 18/48. Removed draw-frag/compute-PSO traces; offscreen surface logs capped at 8, IOSurface failure reasons deduplicated, host flush traces first 8/every 64.
+- No kernel changes; XNU #77 is the workflow input. No blur/clear optimization.

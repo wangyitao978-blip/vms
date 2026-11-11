@@ -6,6 +6,7 @@ on:
       - payload
     paths:
       - vm/metal/SweetMetal.m
+      - tools/bootargs.py
       - .github/workflows/build-vmios-full-gpu-payload.yml
   workflow_dispatch:
     inputs:
@@ -119,7 +120,7 @@ jobs:
           python3 tools/gpu-bundle.py list dist/host-raster/SweetMetalAccel.sgb
 
           python3 tools/mkadt.py dist/host-raster/qemu-gpu.adt \
-            --qemu --qemu-cpus 4 \
+            --qemu --qemu-cpus 3 \
             --gpu-wire \
             --canvas-width 1125 --canvas-height 2436 \
             --gpu-bundle dist/host-raster/SweetMetalAccel.sgb

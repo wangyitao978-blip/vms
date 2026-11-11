@@ -21,7 +21,7 @@ Profiles:
   sample    timing + the stack sampler, for a boot that stalls in userland.
   vm       vmios (the Android app): cpus=N becomes QEMU's -smp, no rd= (the
            app appends rd=ufsroot0 itself). The current validated profile uses
-           4 CPUs; 6/8-vCPU MTTCG runs have hit the XNU pset0 ticket-lock issue.
+           3 CPUs; 6/8-vCPU MTTCG runs have hit the XNU pset0 ticket-lock issue.
   vm-sample  vm + the sampler.
   qemu     Kernel-only boot under QEMU with a ramdisk root (rd=md0), one CPU:
            TCG does not do eight vCPUs usefully.
@@ -65,9 +65,9 @@ TIMING = DEVICE + " sweetts=1 ufsstats=1 ufsstatsecs=5"
 # lock under parallel execution. Keep this count aligned with the ADT and
 # Android's MTTCG override. No rd=: the app appends rd=ufsroot0 itself.
 VM = " ".join([
-    "debug=0xc",
+    "debug=0x8",
     "serial=3",
-    "cpus=4",
+    "cpus=3",
     "keepsyms=1",
     "-noprogress",
     "unentitled_ios_sim_launch=1",
@@ -78,7 +78,7 @@ VM = " ".join([
     "launchd_unsecure_cache=1",
     "wdt=-1",
     "sweetfb_noconsole=1",
-    "sweetfb_hz=30",
+    "sweetfb_hz=15",
     "ufscache=1",
     "ufswait=1",
     # A TCG vCPU can hold a lock through a >125 ms host I/O stall; XNU's
@@ -97,7 +97,7 @@ PROFILES = {
     "timing": TIMING,
     "vm": VM,
     "vm-sample": VM + " sweetsample=SpringBoard,backboardd,lsd,containermanagerd",
-    # Same as `vm` with two vCPUs that actually run in parallel: VmEngine turns
+    # Same as `vm` with three vCPUs that actually run in parallel: VmEngine turns
     # `tcgmulti=1` into -accel tcg,thread=multi (XNU ignores the token).
     "vm-mttcg": VM + " tcgmulti=1",
     "vm-offload": VM + " sweetfb_offload=1",

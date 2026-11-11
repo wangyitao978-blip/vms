@@ -1006,7 +1006,7 @@ sweet_ca_flush(void)
 		if (result == 0) {
 			break;
 		}
-		if (attempt == 0 && sweet_ca_logs < 16) {
+		if (attempt == 0 && (sweet_ca_flushes < 8 || ((sweet_ca_flushes + 1) % 64) == 0)) {
 			sweet_ca_logs++;
 			dprintf(console_fd,
 			    "SWEETMETAL: host flush %u timeout, waiting for host%c",
@@ -1014,7 +1014,7 @@ sweet_ca_flush(void)
 		}
 	}
 	sweet_ca_flushes++;
-	if (sweet_ca_flushes <= 32) {
+	if (sweet_ca_flushes <= 8 || (sweet_ca_flushes % 64) == 0) {
 		dprintf(console_fd,
 		    "SWEETMETAL: host flush %u pending=%u submitted=%u local=%u"
 		    " ms=%.2f%c", sequence, sweet_ca_pending,
@@ -1569,14 +1569,6 @@ __attribute__((objc_root_class))
 
 static id sweet_pipeline_named(id name);
 
-static void
-sweet_log_compute_pso(id function)
-{
-	id name = function != 0 ? sweet_msg_id(function, "name") : 0;
-	dprintf(console_fd, "SWEETMETAL: compute pso %s\n",
-	    name != 0 ? sweet_cstr(name) : "-");
-}
-
 @implementation SweetOpaque
 
 - (id)newFunctionWithName:(id)name
@@ -1685,7 +1677,7 @@ sweet_log_compute_pso(id function)
 - (id)newComputePipelineStateWithFunction:(id)function error:(id *)error
 {
 	sweet_log("library", "newComputePipelineStateWithFunction:error:");
-	sweet_log_compute_pso(function);
+
 	SweetComputePipeline *pipeline = [[SweetComputePipeline alloc] init];
 	[pipeline setComputeName:function != 0 ? sweet_msg_id(function, "name") : 0];
 	return pipeline;
@@ -2268,9 +2260,17 @@ static int
 sweet_render_surface_fail(const char *reason, unsigned long width,
     unsigned long height, unsigned long bpr, int result)
 {
-    static unsigned int logs;
-    if (logs < 64) {
-        logs++;
+    static const char *seen_reasons[16];
+    static unsigned int seen_count;
+    int seen = 0;
+    for (unsigned int i = 0; i < seen_count; i++) {
+        if (strcmp(seen_reasons[i], reason) == 0) {
+            seen = 1;
+            break;
+        }
+    }
+    if (!seen && seen_count < 16) {
+        seen_reasons[seen_count++] = reason;
         if (console_fd < 0) {
             console_fd = open("/dev/console", 1);
         }
@@ -2612,7 +2612,7 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 		tex_surface = identifier;
 		tex_pixels = base;
 		tex_bpr = bpr;
-		if (sweet_offscreen_surface_logs < 32) {
+		if (sweet_offscreen_surface_logs < 8) {
 			sweet_offscreen_surface_logs++;
 			dprintf(console_fd,
 			    "SWEETMETAL: offscreen IOSurface id=%u %lux%lu bpr=%lu base=%p%c",
@@ -2656,7 +2656,6 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 
 static unsigned int sweet_encoder_logs;
 static unsigned int sweet_draw_logs;
-static unsigned int sweet_draw_detail_logs;
 static unsigned int sweet_draw_logs5;
 
 /* Render encoder: records the destination surface and the draw inputs so the
@@ -3105,8 +3104,12 @@ sweet_raster_triangle(SweetRaster *r, unsigned long i0, unsigned long i1,
 			if (r->tex != 0 && r->tex_surface != 0) {
 				float t[4];
 				sweet_texel(r, u, v, t);
-				for (int k = 0; k < 4; k++) {
-					col[k] *= t[k];
+				if (r->tex_fn == 18 || r->tex_fn == 48) {
+					col[3] *= t[3];
+				} else {
+					for (int k = 0; k < 4; k++) {
+						col[k] *= t[k];
+					}
 				}
 			} else if (r->tex != 0) {
 				float t[4];
@@ -3173,6 +3176,7 @@ sweet_ca_batch(const SweetRaster *r, unsigned int dst_id,
 		header.tri_count = (unsigned int)(last - first);
 		header.chunk_index = (unsigned int)chunk;
 		header.chunk_count = (unsigned int)chunks;
+		header.reserved = (unsigned int)r->tex_fn;
 		memcpy(message, &header, sizeof(header));
 		unsigned char *out = message + sizeof(header);
 		for (unsigned long t = first; t < last; t++) {
@@ -3751,19 +3755,6 @@ sweet_texture_surface(id texture)
 			if (!sweet_stage_local) {
 				host_surface = sweet_stage_id;
 			}
-		}
-		if (sweet_draw_detail_logs < 300) {
-			sweet_draw_detail_logs++;
-			const char *frag_name = "-";
-			if (enc_pipeline != 0 &&
-			    ((BOOL (*)(id, SEL, Class))objc_msgSend)(enc_pipeline,
-			    sel_registerName("isKindOfClass:"), objc_getClass("SweetPipeline"))) {
-				frag_name = ((const char *(*)(id, SEL))objc_msgSend)(
-				    enc_pipeline, sel_registerName("fragNameC"));
-			}
-			dprintf(console_fd,
-			    "SWEETMETAL: draw frag=%s dst=%lux%lu tex=%lux%lu tfn=%lu\n",
-			    frag_name, r.dst_w, r.dst_h, r.tex_w, r.tex_h, r.tex_fn);
 		}
 		int host_ok = !sweet_ca_disabled && sweet_accel_port != 0 &&
 		    enc_surface != 0 && r.dst != 0 && r.dst_bpr != 0 &&
@@ -4529,7 +4520,7 @@ struct SweetBlockHeader {
 - (id)newComputePipelineStateWithFunction:(id)function error:(id *)error
 {
 	sweet_log("msg", "newComputePipelineStateWithFunction:error:");
-	sweet_log_compute_pso(function);
+
 	return [[SweetOpaque alloc] init];
 }
 
@@ -4537,14 +4528,14 @@ struct SweetBlockHeader {
     options:(unsigned long)options reflection:(id *)reflection error:(id *)error
 {
 	sweet_log("msg", "newComputePipelineStateWithDescriptor:options:reflection:error:");
-	sweet_log_compute_pso(sweet_msg_id(descriptor, "computeFunction"));
+
 	return [[SweetOpaque alloc] init];
 }
 
 - (id)newComputePipelineStateWithDescriptor:(id)descriptor error:(id *)error
 {
 	sweet_log("msg", "newComputePipelineStateWithDescriptor:error:");
-	sweet_log_compute_pso(sweet_msg_id(descriptor, "computeFunction"));
+
 	return [[SweetOpaque alloc] init];
 }
 
@@ -4552,7 +4543,7 @@ struct SweetBlockHeader {
     reflection:(id *)reflection error:(id *)error
 {
 	sweet_log("msg", "newComputePipelineStateWithFunction:options:reflection:error:");
-	sweet_log_compute_pso(function);
+
 	return [[SweetOpaque alloc] init];
 }
 
