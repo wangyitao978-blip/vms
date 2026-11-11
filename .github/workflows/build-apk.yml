@@ -97,6 +97,35 @@ jobs:
           test -s app/src/main/jniLibs/arm64-v8a/libsweetraster.so
           echo "QEMU engine asset count: $(find "$ENGINE" -maxdepth 1 -type f | wc -l)"
 
+      - name: Inject Host Raster payload into APK assets
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PAYLOAD_RUN_ID: '43079641260'
+        run: |
+          set -euo pipefail
+          RUN_JSON="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PAYLOAD_RUN_ID")"
+          echo "$RUN_JSON" | jq -e '
+            .status == "completed" and
+            .conclusion == "success" and
+            .head_branch == "payload" and
+            .path == ".github/workflows/build-vmios-full-gpu-payload.yml"
+          ' >/dev/null
+          mkdir -p /tmp/host-payload
+          gh run download "$PAYLOAD_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name vmios-host-raster-payload --dir /tmp/host-payload
+          test -s /tmp/host-payload/sweet-qemu-gpu-payload.bin
+          test -s /tmp/host-payload/SHA256SUMS
+          EXPECTED="$(awk '$2 == "sweet-qemu-gpu-payload.bin" {print $1}' /tmp/host-payload/SHA256SUMS)"
+          test -n "$EXPECTED"
+          ACTUAL="$(sha256sum /tmp/host-payload/sweet-qemu-gpu-payload.bin | awk '{print $1}')"
+          test "$EXPECTED" = "$ACTUAL"
+          mkdir -p android/app/src/main/assets/boot
+          cp /tmp/host-payload/sweet-qemu-gpu-payload.bin android/app/src/main/assets/boot/
+          printf '%s\n' "$ACTUAL" > android/app/src/main/assets/boot/payload.sha256
+          echo "Bundled Host Raster payload from run $PAYLOAD_RUN_ID ($ACTUAL)"
+          ls -lh android/app/src/main/assets/boot/
+
       - name: Build debug APK
         run: ./gradlew --no-daemon clean assembleDebug
 
