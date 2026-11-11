@@ -171,6 +171,7 @@ final class CaCompositor {
         int width;
         int height;
         boolean fromUpload;
+        boolean internal;
         int gen;
     }
 
@@ -350,7 +351,7 @@ final class CaCompositor {
         while (entries.hasNext()) {
             Map.Entry<Integer, Decoded> entry = entries.next();
             Decoded d = entry.getValue();
-            if (!d.fromUpload) {
+            if (d.internal || !d.fromUpload) {
                 entries.remove();
                 continue;
             }
@@ -488,7 +489,7 @@ final class CaCompositor {
              * rewritten by the guest between frames, so never reuse their
              * decoded pixels from an earlier draw.
              */
-            if (!uploaded && !internal) {
+            if (!uploaded) {
                 return cached;
             }
             Upload cu = uploads.get(id);
@@ -531,6 +532,7 @@ final class CaCompositor {
         d.width = width;
         d.height = height;
         d.fromUpload = uploadGeneration != 0;
+        d.internal = internal;
         d.gen = uploadGeneration;
         decoded.put(id, d);
         decodeCount++;
