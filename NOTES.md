@@ -1667,3 +1667,9 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - FIX.md records the evidence and scope in commit `d2f7f2b77a2ab19c572315520726ef5abb5b1c7d`.
 - Not yet built or device-verified. The payload workflow is dispatch-only and requires an explicit successful XNU run ID; do not add a push trigger or stale fallback.
 - Compute blur remains unimplemented. Current code still returns SweetOpaque for compute pipeline states and an empty SweetCommandEncoder. Next safe step: record compute PSO name, bound texture/buffer indices, dimensions, and dispatch sizes; use those observations to implement a guarded opt-in software path. Do not guess resource indices or claim blur is fixed.
+
+
+### ACTIVE HANDOFF — compute encoder observation pass (2026-11-11)
+- Payload commit `ed0fe416a709b8e7494578362e2339672a0ab9cd` instruments compute encoder state: pipeline name; texture/buffer bindings 0-7; buffer offsets; both dispatch APIs; texture IOSurface IDs, dimensions and formats. Logging capped at 512 entries per dispatch method.
+- This is diagnostics only; compute work is still not executed and blur is not fixed. Next: build artifact, install/test, capture one Control Center interaction, derive actual read/write texture slots and dimensions from ring logs, then implement the opt-in blur path only from observed contracts.
+- Payload workflow run `43047319308` is associated with this commit. The preceding IOSurface symbol fallback build is run `43046045165`; check its result/artifacts before deciding whether a new APK packaging step is needed.
