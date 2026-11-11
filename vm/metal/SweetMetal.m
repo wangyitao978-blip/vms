@@ -1921,6 +1921,8 @@ static id
 sweet_pipeline_from_descriptor(id descriptor)
 {
 	SweetPipeline *state = [[SweetPipeline alloc] init];
+	((void (*)(id, SEL, const char *))objc_msgSend)(state,
+	    sel_registerName("setFragNameC:"), "-");
 	const char *name = "-";
 	if (descriptor != 0) {
 		id vertex = sweet_msg_id(descriptor, "vertexFunction");
@@ -2020,6 +2022,8 @@ static id
 sweet_pipeline_named(id name)
 {
 	SweetPipeline *state = [[SweetPipeline alloc] init];
+	((void (*)(id, SEL, const char *))objc_msgSend)(state,
+	    sel_registerName("setFragNameC:"), "-");
 	((void (*)(id, SEL, const char *))objc_msgSend)(state,
 	    sel_registerName("setNameC:"), sweet_cstr(name));
 	return state;
