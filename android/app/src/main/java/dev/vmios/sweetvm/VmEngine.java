@@ -2,6 +2,7 @@ package dev.vmios.sweetvm;
 
 import android.app.ActivityManager;
 import android.content.Context;
+import android.os.SystemClock;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -49,6 +50,14 @@ public final class VmEngine {
     private String engineId = "";
     private FramebufferView view;
     private int fps = 4;
+    private volatile long bootStartElapsed;
+
+    private static void logBootStage(String stage, long bootStart, long stageStart) {
+        long now = SystemClock.elapsedRealtime();
+        android.util.Log.i("sweetvm", "boot_stage=" + stage
+                + " elapsed_ms=" + (now - bootStart)
+                + " stage_ms=" + (now - stageStart));
+    }
 
     public VmEngine(Context ctx) {
         this.ctx = ctx.getApplicationContext();
@@ -161,6 +170,10 @@ public final class VmEngine {
     public void start(File payloadFile, File rootFile, String cmdline, int fps,
                       boolean resume, Listener listener) throws Exception {
         stop();
+        final long bootStartMs = SystemClock.elapsedRealtime();
+        bootStartElapsed = bootStartMs;
+        long stageStartMs = bootStartMs;
+        android.util.Log.i("sweetvm", "boot_begin resume=" + resume);
         this.rootFile = rootFile;
         this.fps = Math.max(10, Math.min(60, fps));
         File vmDir = new File(ctx.getFilesDir(), "vm");
@@ -170,6 +183,8 @@ public final class VmEngine {
         logFile = new File(vmDir, "qemu.log");
 
         Payload payload = Payload.load(payloadFile);
+        logBootStage("payload_loaded", bootStartMs, stageStartMs);
+        stageStartMs = SystemClock.elapsedRealtime();
         if (payload.physBase != 0xb0000000L) {
             throw new IOException("payload 不是 QEMU 低内存布局（phys_base="
                     + Long.toHexString(payload.physBase) + "）");
@@ -220,11 +235,16 @@ public final class VmEngine {
         if (am != null) {
             am.getMemoryInfo(mi);
         }
-        boolean prealloc = !resume && (am == null || mi.totalMem >= (6L << 30));
+        // Avoid making cold boot wait for a full 3 GiB zero-touch pass.
+        // Opt in with sweet_prealloc=1 when prioritizing steady-state paging.
+        boolean prealloc = !resume && cmdline.contains("sweet_prealloc=1")
+                && (am == null || mi.totalMem >= (6L << 30));
 
         File ram = new File(vmDir, "ram.bin");
         File stub = new File(vmDir, "stub.bin");
         payload.writeImages(ram, stub, cmdline);
+        logBootStage("payload_images_written", bootStartMs, stageStartMs);
+        stageStartMs = SystemClock.elapsedRealtime();
 
         // Keep the 3 GB RAM file on internal storage: the old external path is
         // FUSE-backed and makes every guest RAM access pay a FUSE round trip.
@@ -238,6 +258,8 @@ public final class VmEngine {
                 rf.setLength(RAM_BYTES);
             }
         }
+        logBootStage("guest_ram_sized", bootStartMs, stageStartMs);
+        stageStartMs = SystemClock.elapsedRealtime();
 
         File qemuShare = new File(vmDir, "qemu-share");
         if (!qemuShare.isDirectory()) {
@@ -247,6 +269,8 @@ public final class VmEngine {
         serial.delete();
 
         EngineAssets.Engine eng = EngineAssets.ensure(ctx);
+        logBootStage("engine_assets_ready", bootStartMs, stageStartMs);
+        stageStartMs = SystemClock.elapsedRealtime();
         engineId = eng.version;
         String qemu = eng.qemu.getAbsolutePath();
 
@@ -353,6 +377,8 @@ public final class VmEngine {
         pb.redirectOutput(ProcessBuilder.Redirect.to(logFile));
         final Process p = pb.start();
         process = p;
+        logBootStage("qemu_process_started", bootStartMs, stageStartMs);
+        stageStartMs = SystemClock.elapsedRealtime();
         if (cpus >= 2) {
             boolean configured = false;
             for (int i = 0; i < 50 && !configured; i++) {
@@ -369,6 +395,9 @@ public final class VmEngine {
                 }
             }
             android.util.Log.i("sweetvm", "psci smc configured=" + configured);
+            logBootStage("psci_configured", bootStartMs, stageStartMs);
+        } else {
+            logBootStage("qemu_running_single_cpu", bootStartMs, stageStartMs);
         }
         running = true;
         stopping = false;
@@ -499,6 +528,10 @@ public final class VmEngine {
                         }
                         long t0 = System.nanoTime();
                         v.copyFromBuffer(map);
+                        if (frames == 0) {
+                            android.util.Log.i("sweetvm", "boot_stage=first_frame elapsed_ms="
+                                    + (SystemClock.elapsedRealtime() - bootStartElapsed));
+                        }
                         long dt = System.nanoTime() - t0;
                         copyNanos += dt;
                         if (dt > copyMaxNanos) {
