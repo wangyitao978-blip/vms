@@ -39,3 +39,12 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Patch hunk structure was checked for internally consistent old/new line counts after editing. XNU CI compilation and runtime behavior are not yet verified; do not claim successful build or device validation.
 - Scope correction: exploratory Metal/Java edits made on `xun` during this pass were reverted because those files belong on their APK/Payload build branches. Reverts: `b3c3d7bfdf48ceb55a0b213d3c261a0dcf2aa7c9` and `a2a9e8cc40a65ea9080a334caed29c192ec2ac98`. The XNU patch was not changed in this A1 pass.
 - Build/device validation: not yet verified. The APK source commit is committed; do not treat it as a successful APK build or device test. No new XNU/Payload build is claimed.
+
+
+## 2026-11-11 XNU 0097 patch parser failure and provenance chain repair
+- Payload #51 (42960358301) downloaded XNU run 42952041760 (#55), not #43. Its kernel SHA-256 was 1438cd81b0a7431e1da09742f103e85128117684074ab2d9b3c2651eb83fbc72; host-raster artifact zip SHA-256 was 522b068d9d4c78c0c4a9e7a349405b4a0a2ce17aa43a8b12661a0792f81dc751.
+- XNU #55 log proves 0097-sweet-gpu-ca-draw.patch was skipped as malformed: error: corrupt patch at line 343. CI success did not prove Surface allocation code was compiled.
+- Corrected four malformed unified-diff hunk counts in xnu/patches/0097-sweet-gpu-ca-draw.patch; every hunk's declared old/new counts now matches its body.
+- Added a post-build source-tree gate requiring SWEET SURF: memory in SweetSurface.cpp and kSweetGPUSurfaceMap in SweetGPU.cpp; builds that skip 0097 now fail.
+- Added automatic Payload dispatch after a successful xun build, passing that exact GITHUB_RUN_ID. Normal XNU-to-Payload builds no longer require manual run-ID entry. Added actions: write permission.
+- Runtime validation remains pending. Do not change lock timeout parameters or unrelated rendering paths in this repair.
