@@ -75,3 +75,10 @@ No source code has yet been ported in this branch. Record actual commits and run
 - `SweetCommandEncoder` now stores compute PSO state, texture slots 0-7, buffer slots 0-7 and offsets. It logs both `dispatchThreadgroups` and `dispatchThreads` with PSO function name, grid/group dimensions, each bound texture pointer + IOSurface ID + dimensions + pixel format + class, and each bound buffer pointer + offset + class. Each dispatch path is capped at 512 log entries. Pipeline state now preserves its compute function name for diagnostics.
 - This is instrumentation only: no compute shader execution, convolution, resampling, texture writes, or blur switch has been added. It must not be described as a blur fix. Capture one Control Center interaction and use actual bindings/dimensions to build the resource map before implementing a guarded software path.
 - Payload workflow was triggered by the source push: run `43047319308`, commit `ed0fe416a709b8e7494578362e2339672a0ab9cd`. Build and artifact status must be checked before sharing a payload. The preceding IOSurface fallback build is run `43046045165` and must be checked separately.
+
+
+## 2026-11-11 compute instrumentation build result
+- Payload workflow run `43047319308` completed successfully for source commit `ed0fe416a709b8e7494578362e2339672a0ab9cd`. Both SweetMetalAccel plugin build variants compiled and both payload artifacts uploaded successfully.
+- Artifacts: `vmios-host-raster-payload` ID `13867657031`; `vmios-guest-local-raster-payload` ID `13868101386`. Run URL: https://github.com/wangyitao978-blip/vms/actions/runs/43047319308 .
+- XNU provenance was validated and embedded: run `43022096198`, branch `xun`, commit `065b5d583c95fe0eaa6f2c74b118f6a8acb1cacd`, kernel SHA-256 `09e963f8e71c7aac0eb6ef0b73be01afdf9b12a616e6edc4cb835fecbac4f534`.
+- Build logs show compiler warnings (including existing CoreFoundation const-qualifier and Objective-C method warnings), but all build and upload steps succeeded. No device runtime verification yet. Install the host-raster payload first for normal host rendering and collect one Control Center ring; guest-local is the comparison/diagnostic variant.
