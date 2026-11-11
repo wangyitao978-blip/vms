@@ -1667,3 +1667,10 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - Persisted offload option defaults on; advanced CheckBox can disable native present without reinstall. QEMU command line sets `sweetfb_offload=1` by default; disabling sets `=0`.
 - QEMU taskset mask `e0` (CPU5–7), 3 vCPUs, cold prealloc only when available memory >=4 GiB. Keep `tlto_us/slto_us=2000000`.
 - Device checks remain pending: `present=native`, copies/completion continue, PSCI brings up 3 CPUs. No XNU changes.
+
+
+### 2026-11-12 VMs identity and project overview
+- Android launcher label is already exactly "VMs"; retained the existing applicationId/package to avoid breaking upgrades and app-private VM data.
+- Replaced launcher artwork with the user-provided black-and-white image for standard, round, and adaptive launcher icon resources.
+- Rewrote README to explain what VMs is, what it can and cannot do, completed work, current limitations, and build/payload status.
+- Important: at this point APK branch still has no bundled payload extraction or workflow injection. Planned bundled source is Host Raster only; Guest Local must not be included.

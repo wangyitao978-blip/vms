@@ -1,96 +1,89 @@
-# vmios
+# VMs
 
-**在虚拟机里运行真实的 iOS 16。**
+**VMs 是一个面向 Android 的实验性 iOS 虚拟机项目。**
 
-vmios 让 Apple 原版的 iOS 16.7.16（20H392，iPhone X / `iPhone10,3` / D22AP）
-用户态运行在打了补丁的开源 XNU 8796 内核之上。客户机里是**真实的 iOS 根文件
-系统与共享缓存**：launchd、系统守护进程、backboardd、SpringBoard 和系统自带
-应用，而不是重写或伪造的界面。
+项目目标是在 Android 设备上通过 QEMU 运行真实的 iOS 16 系统环境，而不是制作一个仿 iOS 桌面，也不是把 iOS 应用转换成 Android 应用。项目围绕 QEMU、经过适配的 XNU 内核、SWEETXNU 启动 payload、虚拟存储和显示设备，以及宿主侧渲染组件展开。
 
-同一套内核与客户机镜像支持两个目标：
+> **项目状态：实验性开发中。** 能启动内核和真实 iOS 用户态，不等于完整 iOS 桌面已经稳定可用。显示合成、图形兼容性、性能和不同设备适配仍在持续开发与验证。
 
-| 目标 | 状态 |
+## 它是什么
+
+VMs 将以下部分组合成一套虚拟设备：
+
+- **QEMU**：在 Android 上提供 ARM64 虚拟机和 TCG CPU 模拟。
+- **XNU / SWEETXNU**：为 iOS 用户态提供经过适配的 Darwin/XNU 内核。
+- **iOS 系统环境**：目标为 Apple iOS 16.7.16（20H392，iPhone X / iPhone10,3 / D22AP）的真实系统用户态。
+- **虚拟硬件**：包括 UFS 存储、共享内存 framebuffer、触摸输入和宿主通信接口。
+- **SweetMetal 与宿主光栅器**：尝试承接客户机 CoreAnimation/Metal 渲染工作，并把图形结果呈现到 Android 屏幕。
+
+## 能做什么
+
+当前代码与已有构建支持或正在实现的能力：
+
+- 在 QEMU TCG 中启动适配过的 XNU，并运行真实 iOS 用户态组件。
+- 使用独立的 iOS 根镜像文件作为虚拟机存储；根镜像由使用者自行准备。
+- 通过共享内存 framebuffer 传递客户机画面，并接收触摸输入。
+- 使用 SweetMetal、宿主侧软件光栅路径及 Android JNI 光栅器处理部分图形命令。
+- 在支持的构建配置中使用多线程 TCG、多个虚拟 CPU，以及可选的原生 framebuffer present 路径。
+- 通过 Android APK 管理虚拟机启动、运行状态和相关选项。
+
+上述能力的完成度并不相同。某条代码路径已经实现或 APK 已经构建成功，不代表它已在所有设备上完成端到端验证。
+
+## 不能做什么 / 当前限制
+
+- **不是完整的 iOS 兼容层**：不能保证任意 iOS 版本、任意 iPhone 型号或任意 iOS App 都能运行。
+- **不是 GPU 直通**：QEMU TCG 虚拟机并没有把 Android 手机上的 Adreno GPU 直接交给 iOS。宿主图形路径属于项目自建的协议与渲染实现，功能和性能仍有限。
+- **不能保证桌面显示完整**：内核启动、SpringBoard 进程启动和窗口树创建，不等于 WindowServer/CoreAnimation 已经把完整桌面稳定呈现在屏幕上。
+- **不能保证流畅度或兼容性**：不同 SoC、Android 版本、内存容量和驱动环境可能产生明显差异。
+- **不附带 Apple 系统镜像**：仓库不分发 iOS IPSW、根文件系统、共享缓存或其他 Apple 专有系统文件。使用者必须自行合法准备所需文件。
+- **不能替代实体 iPhone**：蜂窝基带、真实 Apple 安全硬件、摄像头、Face ID、传感器及其他专用硬件并未被完整虚拟化。
+- **不是面向日常使用的稳定产品**：目前更适合开发、调试和研究，不应把实验构建视为可用于生产或数据安全关键场景的软件。
+
+## 我们已经做了什么
+
+项目迭代包含以下工作（不同项目分支和构建的状态请以对应提交与 GitHub Actions 记录为准）：
+
+1. **内核适配**：围绕 XNU 8796 增加和维护虚拟设备、启动、存储、显示、输入及相关系统服务所需的补丁。
+2. **虚拟存储**：实现 QEMU 侧 UFS 设备路径，使客户机可以使用外部准备的 iOS 根镜像。
+3. **显示与输入**：建立共享 framebuffer、触摸输入和宿主/客户机之间的通信路径。
+4. **SweetMetal**：实现虚拟 Metal 设备及渲染命令转发的实验性路径，并持续补齐宿主侧光栅处理。
+5. **Android 宿主端**：开发 QEMU 启动管理、JNI 光栅器、帧缓冲呈现、CPU/内存管理和诊断日志。
+6. **性能与稳定性工作**：调整虚拟 CPU 配置、TCG 线程亲和性、内存预分配条件、日志限流和 framebuffer present 流程。
+7. **可回退的实验选项**：原生 present 路径提供开关，便于在设备出现兼容性问题时回退到其他呈现方式。
+
+### 当前 APK / Payload 说明
+
+Android 应用显示名称为 **VMs**。APK、Host Raster payload 和 XNU 内核分别由不同 GitHub Actions 工作流构建，不能把其中一个构建成功误认为另外两个也已完成。
+
+**当前仓库状态说明（2026-11-12）：** APK 工作流尚未加入 Host Raster payload 的自动注入步骤，APK 也尚未包含 `BootAssets` 自动释放实现。因此目前不能宣称安装 APK 后就会自动释放内置 payload；请以最新 APK 构建说明和实际 artifact 内容为准。计划内置时只选择 **Host Raster payload**，不选择 Guest Local payload。XNU 沿用已验证的既有构建，不因 APK 图标或文档修改而重新构建。
+
+## 仓库结构
+
+| 路径 | 内容 |
 | --- | --- |
-| **Android 应用**（`android/`，`dev.vmios.sweetvm`） | QEMU TCG + 自定义 UFS 控制器 + 面向宿主 Adreno GPU 的 virtio GPU 线缆 + 共享内存面板；可启动真实 iOS 用户态 |
-| **裸机 shim**（`shim/`） | 早期 Redmi Note 10 Pro（`sweet`，SM7150）移植；保留作参考，当前暂停 |
+| `android/` | Android 应用、QEMU 启动管理和宿主侧代码 |
+| `vm/` | 虚拟硬件、显示通信及 SweetMetal 实现 |
+| `xnu/patches/` | 按编号应用的 XNU 内核补丁 |
+| `tools/` | ADT、payload、镜像和调试工具 |
+| `shim/` | 早期裸机移植实验，当前暂停维护 |
+| `docs/` | 设计说明、分析记录和项目约定 |
+| `NOTES.md`、`FIX.md` | 开发交接、修复与构建记录 |
 
-## 结构
+## 构建与使用
 
-```
-+--------------------- Android 应用（或 PC 上的 QEMU） ---------------------+
-|  QEMU virt，1~2 个 vCPU，TCG                                             |
-|   SWEETXNU payload：XNU 8796 + Apple 设备树 + 可选根镜像                  |
-|   存储：sweet-ufs -> HFSX 格式 iOS 根镜像（userdata 中的 16 GiB 文件）      |
-|   显示：共享客户机内存中的 sweet-fb 面板                                   |
-|   GPU：virtio console 线缆 -> 宿主 EGL/GLES（Adreno）                      |
-+---------------------------------------------------------------------------+
-        内核补丁位于 xnu/patches，Metal 插件位于 vm/metal
-```
-
-内核补丁补齐真实 iOS 用户态所需的存储、显示、触摸、HID、AppleKeyStore、电源
-和 GPU 基础服务。`vm/metal` 构建 `SweetMetal`：内核把它安装进客户机的
-`AGXMetalA11.bundle`，向 CoreAnimation 注册一个虚拟 `MTLDevice`，再把渲染
-pass 通过 GPU 线缆转发给宿主。
-
-## 当前进度
-
-- **启动**：真实 iOS 16.7.16 用户态可在 QEMU TCG 下启动；launchd、backboardd、
-  SpringBoard 和 Setup 进程都能运行，SpringBoard 会创建窗口树。
-- **显示**：面板由客户机内存提供；内核控制台可静音，把面板让给合成器。
-- **GPU**：虚拟 Metal 设备是客户机的系统默认设备，CoreAnimation 的 Metal
-  上下文能完成初始化；客户机用户态已经可以经内核线缆驱动宿主 GPU 完成填充
-  （已在真机上端到端验证）。
-- **待解决**：CoreAnimation 的 WindowServer 仍提交空 swap（没有 layer
-  surface），iOS 界面尚未上屏；宿主端的 draw/blit 翻译也还没实现。当前
-  handoff、证据与下一步见 `NOTES.md`。
-
-早期裸机里程碑（官方主页、触摸、按键）记录在 `docs/` 与 `NOTES.md`。
-
-## 目录
-
-| 路径 | 用途 |
-| --- | --- |
-| `xnu/patches/` | 按编号顺序应用的内核补丁；CI 产出 `kernel.development.sweet` |
-| `vm/` | 虚拟硬件：UFS、framebuffer、触摸、GPU 线缆、Metal 插件（`vm/metal`） |
-| `android/` | Android 应用（`dev.vmios.sweetvm`）、QEMU 引擎、宿主 GPU 服务 |
-| `tools/` | payload/ADT 构建、镜像工具、日志与崩溃分析工具 |
-| `shim/` | 裸机启动 shim（旧目标） |
-| `docs/` | 设计、启动分析、性能记录与 `NAMING.md` |
-| `site/` | 项目网站 |
-| `research/`、`artifacts/`、`.tools/` | 本地分析输入与临时产物，不入库 |
-
-## 构建
-
-内核：修改 `xnu/patches/` 后由 `xnu` 的 GitHub Actions 工作流构建（或使用
-同样的 blacktop 构建树在本地构建）。
-
-Payload：
+Android APK 可在项目提供的 Android Gradle 构建环境中编译：
 
 ```sh
-python3 tools/mkadt.py out.adt --qemu --gpu-wire --gpu-bundle vm/metal/build/SweetMetalAccel.sgb
-python3 tools/mkpayload.py xnu/out/kernel.development.sweet out.adt payload.bin --cmdline "..."
+cd android
+./gradlew assembleDebug
 ```
 
-Android 应用：
+XNU 与 payload 使用各自的 GitHub Actions 工作流构建。具体命令、依赖和产物名称可能随分支调整，请以相应 workflow 和构建记录为准。
 
-```sh
-cd android && ./gradlew assembleDebug
-```
+运行前需要准备与当前 payload 匹配的 iOS 根镜像及启动文件。请先阅读项目文档和对应构建记录，并保留原始镜像与可回退的旧构建。
 
-iOS 根镜像由使用者自行准备；本仓库不包含 Apple 的系统文件。
+## 许可证与致谢
 
-## 鸣谢
+项目代码许可证见 [LICENSE](LICENSE)。Apple 的 iOS 系统文件及相关商标归其各自权利人所有；本仓库不提供 Apple 专有系统镜像。
 
-见 [CREDITS.md](CREDITS.md)。vmios 建立在 XNU、blacktop 的
-`darwin-xnu-build`、UniXNU 的 virtio console 实现、QEMU、Ghidra，以及更早的
-`hackios` / iOS-on-Android 研究之上。
-
-## 命名与约定
-
-项目标识符、前缀与符号规则见 [`docs/NAMING.md`](docs/NAMING.md)。简要原则：
-面向用户与宿主侧统一使用 `vmios`；客户机平台 ABI 保留历史 `sweet` 前缀，
-它是冻结的命名空间，按版本整体迁移，不做零散重命名。
-
-## 许可证
-
-MIT（见 `LICENSE`）。Apple 的 iOS 文件版权归 Apple，本仓库不包含它们。
+项目依赖和致谢见 [CREDITS.md](CREDITS.md)。本项目是独立的实验性工程，与 Apple Inc. 无隶属或认可关系。

@@ -55,3 +55,11 @@ No source code has yet been ported in this branch. Record actual commits and run
 - `BootConfig.offload` defaults true and persists; Advanced options exposes `原生 present（零拷贝，出问题可关）`. `iosCmdline()` appends `sweetfb_offload=1` after `tcgmulti` unless already specified; disabling the checkbox forces `sweetfb_offload=0`. Existing QEMU sweet-fb device/completion handling is retained.
 - `VmEngine` taskset mask changed from `fc` to `e0` (host CPUs 5–7). Cold-boot preallocation now uses available memory >=4 GiB. `MainActivity` enforces `cpus=3`; 2-second `tlto_us/slto_us` are preserved.
 - APK workflow auto-builds on `apk` branch push. No XNU change. CI success is not device validation; verify `present=native`, completion/copies growth, and 3 PSCI CPUs on device.
+
+
+## 2026-11-12 VMs branding and README
+- Updated the APK launcher artwork to use the user's supplied black-and-white image in the launcher PNG resources and adaptive-icon foreground. Kept both launcher resource names (regular/round) consistent.
+- Verified AndroidManifest still uses @string/app_name and strings.xml already sets app_name to "VMs"; no package/applicationId rename was made, preserving installed app data compatibility.
+- Replaced README with a project introduction covering purpose, architecture, current capabilities, limitations, completed engineering work, and the explicit APK/payload status.
+- Confirmed before editing that apk branch had no assets/boot directory, no BootAssets.java, and build-apk.yml did not download a payload. Therefore this branding/documentation change does not claim payload bundling is complete. Future bundle policy: Host Raster only; never Guest Local.
+- No changes to main or xun. No XNU build triggered.
