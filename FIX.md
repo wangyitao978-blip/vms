@@ -48,3 +48,10 @@ No source code has yet been ported in this branch. Record actual commits and run
 ## 2026-11-11 APK-owned compositor cache fix
 - Build ownership check: `build-apk.yml` compiles the Android Java compositor; the Payload workflow separately compiles `vm/metal/SweetMetal.m`. Applied the same-frame `F_INTERNAL` decoded-pixel cache fix to the APK branch's `CaCompositor.java` as well, so the APK actually contains the Java hotfix. `Decoded.internal` is set at decode time and internal entries are explicitly invalidated at `onFlush()`; all non-upload surface entries continue to be evicted at the frame boundary.
 - This closes the branch placement gap: APK carries the Android compositor change; Payload carries the Metal plugin threshold/log-throttle change and matching compositor source mirror. No XNU patch changed.
+
+
+## 2026-11-12 final ring12 APK pass
+- APK branch only; `main` and `xun` unchanged. `CaCompositor` reads `reserved` at byte offset 84 as `texFn` and passes it to both Java raster fallback and JNI `nativeTriangle`. `sweetraster.c` applies alpha-only texture multiplication for texFn 18/48, otherwise preserves RGBA multiplication.
+- `BootConfig.offload` defaults true and persists; Advanced options exposes `原生 present（零拷贝，出问题可关）`. `iosCmdline()` appends `sweetfb_offload=1` after `tcgmulti` unless already specified; disabling the checkbox forces `sweetfb_offload=0`. Existing QEMU sweet-fb device/completion handling is retained.
+- `VmEngine` taskset mask changed from `fc` to `e0` (host CPUs 5–7). Cold-boot preallocation now uses available memory >=4 GiB. `MainActivity` enforces `cpus=3`; 2-second `tlto_us/slto_us` are preserved.
+- APK workflow auto-builds on `apk` branch push. No XNU change. CI success is not device validation; verify `present=native`, completion/copies growth, and 3 PSCI CPUs on device.

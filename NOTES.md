@@ -1660,3 +1660,10 @@ Verified on the K70 Pro: `SWEET HID: touch 0 down/up` in pairs, and one swipe to
 `VmEngine` now takes `tcgmulti=1` from the command line and uses `-accel tcg,thread=multi`; `tools/bootargs.py vm-mttcg` is the profile. It boots, shows five threads in `/proc/<pid>/cmdline`, and does **not** trip the pset0 ticket lock - but it is not the fix for responsiveness, the software rasterizer is.
 
 The APK can be built on Windows without Android Studio; the whole recipe (JDK 17, SDK 35, Gradle 8.9 from mirrors, `android.overridePathCheck=true` for the CJK path, and the signature mismatch that forces an uninstall + 16 GiB image re-push) is in `android/README.md`.
+
+
+### 2026-11-12 ring12 final APK pass
+- APK compositor consumes `reserved` offset 84 as texFn and propagates it through Java and JNI; native and Java raster paths use alpha-only modulation for shader IDs 18/48.
+- Persisted offload option defaults on; advanced CheckBox can disable native present without reinstall. QEMU command line sets `sweetfb_offload=1` by default; disabling sets `=0`.
+- QEMU taskset mask `e0` (CPU5–7), 3 vCPUs, cold prealloc only when available memory >=4 GiB. Keep `tlto_us/slto_us=2000000`.
+- Device checks remain pending: `present=native`, copies/completion continue, PSCI brings up 3 CPUs. No XNU changes.
