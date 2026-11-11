@@ -481,12 +481,12 @@ public final class MainActivity extends Activity {
         if (modeOne != null) {
             boolean canOne = rootView != null && rootView.getWidth() > 1125
                     && rootView.getHeight() > 2436;
-            modeOne.setEnabled(!running && canOne);
+            modeOne.setEnabled(canOne);
             modeOne.setAlpha(modeOne.isEnabled() ? 1f : 0.35f);
         }
-        if (modeShrink != null) { modeShrink.setEnabled(!running); modeShrink.setAlpha(running ? .35f : 1f); }
-        if (modeFull != null) { modeFull.setEnabled(!running); modeFull.setAlpha(running ? .35f : 1f); }
-        if (immersiveButton != null) immersiveButton.setEnabled(!running);
+        if (modeShrink != null) { modeShrink.setEnabled(true); modeShrink.setAlpha(1f); }
+        if (modeFull != null) { modeFull.setEnabled(true); modeFull.setAlpha(1f); }
+        if (immersiveButton != null) immersiveButton.setEnabled(true);
     }
 
     private void setDisplayMode(int mode) {
@@ -511,7 +511,7 @@ public final class MainActivity extends Activity {
         fbView.setLayoutParams(lp);
         if (modeOne != null) {
             boolean allowed = w > 1125 && h > 2436;
-            modeOne.setEnabled(allowed && !vmActive);
+            modeOne.setEnabled(allowed);
             modeOne.setAlpha(modeOne.isEnabled() ? 1f : .35f);
         }
     }
