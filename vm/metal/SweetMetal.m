@@ -3550,7 +3550,14 @@ sweet_texture_surface(id texture)
 			 * render targets. They must never be gated by the 1 MiB heap
 			 * upload fallback below.
 			 */
-			if (r.tex_mapped) {
+			int tex_is_surface = r.tex_mapped ||
+			    (r.tex_owner != 0 && r.tex_internal && r.tex_surface != 0 &&
+			    ((int (*)(id, SEL))objc_msgSend)(r.tex_owner,
+			    sel_registerName("ownsRenderSurface")));
+			if (tex_is_surface) {
+				/* Includes cross-process IOSurfaces and our own offscreen
+				 * render targets. Map their pages directly regardless of
+				 * texture size; the 1 MiB limit applies only to heap uploads. */
 				if (!sweet_ca_map(r.tex_surface)) {
 					host_ok = 0;
 				} else {
