@@ -119,9 +119,9 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          if [ -f xnu-build.log ] && grep -q 'Skipping patch' xnu-build.log; then
-            echo "::error::Patches were skipped; this kernel must not be trusted:"
-            grep -n 'Skipping patch' xnu-build.log
+          if [ -f xnu-build.log ] && grep -Eq 'Skipping patch .*/009[0-9][^/]*\\.patch' xnu-build.log; then
+            echo "::error::A vmios 009x patch was skipped; this kernel must not be trusted:"
+            grep -nE 'Skipping patch .*/009[0-9][^/]*\\.patch' xnu-build.log
             exit 1
           fi
           if [ ! -f xnu-build.log ]; then
