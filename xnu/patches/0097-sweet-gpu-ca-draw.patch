@@ -312,35 +312,51 @@ diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.c
 index 7f90c56..6c448ff 100644
 --- a/iokit/Kernel/arm/SweetSurface.cpp
 +++ b/iokit/Kernel/arm/SweetSurface.cpp
-@@ -73,7 +73,13 @@ static uint32_t      sweet_surface_users[SWEET_SURFACE_MAX_ID];
+@@ -73,7 +73,9 @@ static uint32_t      sweet_surface_users[SWEET_SURFACE_MAX_ID];
  static uint32_t      sweet_surface_next_id = 1;
  static uint32_t      sweet_surface_creates_logged;
  static uint64_t      sweet_surface_wired;       /* bytes of buffer surfaces */
 +static uint64_t      sweet_surface_wired_peak;
 +static volatile SInt32 sweet_surface_alive_surfaces;
-+static volatile SInt32 sweet_surface_wired_over_logs;
-+static uint32_t      sweet_surface_wired_logs;
+ static uint32_t      sweet_surface_wired_logs;
  #define SWEET_SURFACE_WIRED_MAX         (1536ull << 20)
- 
+
  OSDefineMetaClassAndStructors(SweetSurface, OSObject);
-+
-+@@ -80,1 +84,16 @@ SweetSurface::free()
-+ {
-+ 	if (OSDynamicCast(IOBufferMemoryDescriptor, memory) != NULL) {
-+ 		OSAddAtomic64(-(SInt64)allocSize, (volatile SInt64 *)&sweet_surface_wired);
-++		uint32_t alive = (uint32_t)OSDecrementAtomic(&sweet_surface_alive_surfaces) - 1;
-++		uint64_t wired = (uint64_t)OSAddAtomic64(0, (volatile SInt64 *)&sweet_surface_wired);
-++		IOLockLock(sweet_surface_lock);
-++		uint64_t peak = sweet_surface_wired_peak;
-++		IOLockUnlock(sweet_surface_lock);
-++		if ((alive & 0x3f) == 0) {
-++			IOLog("SWEET SURF: alive=%u wired=%llu peak=%llu (free)\\n",
-++			    alive, (unsigned long long)wired, (unsigned long long)peak);
-++		}
-+ 	}
-+ 	OSSafeReleaseNULL(kernelMap);
-+
-@@ -686,4 +699,87 @@ IOSurfaceRootUserClient::create(IOExternalMethodArguments *args)
+@@ -80,6 +81,17 @@ SweetSurface::free()
+ {
++	if (state != NULL) {
++		uint32_t alive = (uint32_t)OSDecrementAtomic(&sweet_surface_alive_surfaces) - 1;
++		uint64_t wired = (uint64_t)OSAddAtomic64(0, (volatile SInt64 *)&sweet_surface_wired);
++		IOLockLock(sweet_surface_lock);
++		uint64_t peak = sweet_surface_wired_peak;
++		IOLockUnlock(sweet_surface_lock);
++		if ((alive & 0x3f) == 0) {
++			IOLog("SWEET SURF: alive=%u wired=%llu peak=%llu (free)\n",
++			    alive, (unsigned long long)wired, (unsigned long long)peak);
++		}
++	}
+ 	if (OSDynamicCast(IOBufferMemoryDescriptor, memory) != NULL) {
+ 		OSAddAtomic64(-(SInt64)allocSize, (volatile SInt64 *)&sweet_surface_wired);
+ 	}
+ 	OSSafeReleaseNULL(kernelMap);
+@@ -126,8 +138,17 @@ sweet_surface_alloc(void)
+ 	if (s->state == NULL) {
+ 		s->release();
+ 		return NULL;
+ 	}
+ 	bzero(s->state->getBytesNoCopy(), page_size);
++	uint32_t alive = (uint32_t)OSIncrementAtomic(&sweet_surface_alive_surfaces) + 1;
++	uint64_t wired = (uint64_t)OSAddAtomic64(0, (volatile SInt64 *)&sweet_surface_wired);
++	IOLockLock(sweet_surface_lock);
++	uint64_t peak = sweet_surface_wired_peak;
++	IOLockUnlock(sweet_surface_lock);
++	if ((alive & 0x3f) == 0) {
++		IOLog("SWEET SURF: alive=%u wired=%llu peak=%llu (create)\n",
++		    alive, (unsigned long long)wired, (unsigned long long)peak);
++	}
+ 	return s;
+ }
+@@ -686,4 +708,81 @@ IOSurfaceRootUserClient::create(IOExternalMethodArguments *args)
  	ret = sweet_surface_layout(s, props);
  	if (ret == kIOReturnSuccess) {
  		IOBufferMemoryDescriptor *mem = NULL;
@@ -349,16 +365,16 @@ index 7f90c56..6c448ff 100644
 +		    (volatile SInt64 *)&sweet_surface_wired);
 +		if (wired_before > SWEET_SURFACE_WIRED_MAX ||
 +		    s->allocSize > SWEET_SURFACE_WIRED_MAX - wired_before) {
-+			if (OSIncrementAtomic(&sweet_surface_wired_over_logs) < 8) {
-+				IOLog("SWEET SURF: wired old=%llu add=%u over soft max %llu (allocating anyway)\\n",
++			static volatile SInt32 wired_over_logs;
++			if (OSIncrementAtomic(&wired_over_logs) < 8) {
++				IOLog("SWEET SURF: wired old=%llu add=%u over soft max %llu (allocating anyway)\n",
 +				    (unsigned long long)wired_before, s->allocSize,
 +				    (unsigned long long)SWEET_SURFACE_WIRED_MAX);
 +			}
 +		}
 +		{
-+			/* The host compositor addresses surfaces by physical address, so
-+			 * prefer one linear run; fall back to ordinary wired pages when
-+			 * the allocator cannot supply one. */
++			/* Prefer contiguous memory for the host fast path, then any wired
++			 * pages. The soft budget never blocks a valid allocation. */
 +			mem = IOBufferMemoryDescriptor::inTaskWithOptions(kernel_task,
 +			    kIODirectionInOut | kIOMemoryKernelUserShared |
 +			    kIOMemoryPhysicallyContiguous, s->allocSize, page_size);
@@ -373,12 +389,12 @@ index 7f90c56..6c448ff 100644
 +			IOByteCount span = 0;
 +			addr64_t pa = mem->getPhysicalSegment(0, &span, 0);
 +			sweet_surface_wired_logs++;
-+			IOLog("SWEET SURF: memory %u bytes contiguous=%d pa 0x%llx span 0x%llx\\n",
++			IOLog("SWEET SURF: memory %u bytes contiguous=%d pa 0x%llx span 0x%llx\n",
 +			    s->allocSize, contiguous, (unsigned long long)pa,
 +			    (unsigned long long)span);
 +		}
 +		if (mem == NULL) {
-+			IOLog("SWEET SURF: memory allocation failed bytes=%u wired=%llu limit=%llu\\n",
++			IOLog("SWEET SURF: memory allocation failed bytes=%u wired=%llu limit=%llu\n",
 +			    s->allocSize, (unsigned long long)sweet_surface_wired,
 +			    (unsigned long long)SWEET_SURFACE_WIRED_MAX);
 +			OSAddAtomic64(-(SInt64)s->allocSize, (volatile SInt64 *)&sweet_surface_wired);
@@ -387,26 +403,20 @@ index 7f90c56..6c448ff 100644
 +			bzero(mem->getBytesNoCopy(), s->allocSize);
 +			s->memory = mem;
 +			s->mapCache = kIOMapDefaultCache;
-+			uint32_t alive = (uint32_t)OSIncrementAtomic(&sweet_surface_alive_surfaces) + 1;
 +			uint64_t wired = (uint64_t)OSAddAtomic64(0,
 +			    (volatile SInt64 *)&sweet_surface_wired);
 +			IOLockLock(sweet_surface_lock);
 +			if (wired > sweet_surface_wired_peak) {
 +				sweet_surface_wired_peak = wired;
 +			}
-+			uint64_t peak = sweet_surface_wired_peak;
 +			IOLockUnlock(sweet_surface_lock);
-+			if ((alive & 0x3f) == 0) {
-+				IOLog("SWEET SURF: alive=%u wired=%llu peak=%llu (create)\\n",
-+				    alive, (unsigned long long)wired, (unsigned long long)peak);
-+			}
 +			if (!sweet_surface_publish(s)) {
 +				ret = kIOReturnNoResources;
 +			}
 +		}
 +	}
 +	if (ret == kIOReturnSuccess && s->allocSize > 0 && s->memory == NULL) {
-+		IOLog("SWEET SURF: INVALID id %u alloc=%u without memory\\n",
++		IOLog("SWEET SURF: INVALID id %u alloc=%u without memory\n",
 +		    s->id, s->allocSize);
 +		ret = kIOReturnNoMemory;
 +	}
@@ -414,7 +424,7 @@ index 7f90c56..6c448ff 100644
 +		char name[32];
 +		proc_selfname(name, sizeof(name));
 +		sweet_surface_creates_logged++;
-+		IOLog("SWEET SURF: %s create id %u %ux%u fmt 0x%x bpe %u bpr %u planes %u size %u keys %u -> 0x%x\\n",
++		IOLog("SWEET SURF: %s create id %u %ux%u fmt 0x%x bpe %u bpr %u planes %u size %u keys %u -> 0x%x\n",
 +		    name, s->id, s->width, s->height, s->pixelFormat, s->bytesPerElement,
 +		    s->bytesPerRow, s->planeCount, s->allocSize, props->getCount(), ret);
 +	}
