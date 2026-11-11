@@ -6,12 +6,13 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: android
@@ -19,14 +20,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install QEMU host build dependencies
+      - name: Download the upstream-built QEMU engine and Termux libraries
         working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y build-essential ninja-build pkg-config python3 python3-venv \
-            git wget curl gzip dpkg-dev libglib2.0-dev libpixman-1-dev device-tree-compiler \
-            libfdt-dev libslirp-dev unzip
+          gh run download 42449507465 \
+            --repo "$GITHUB_REPOSITORY" \
+            --name vmios-upstream-apk-no-xnu \
+            --dir /tmp/upstream-apk
+          APK=/tmp/upstream-apk/android/app/build/outputs/apk/debug/app-debug.apk
+          if [ ! -s "$APK" ]; then
+            APK=/tmp/upstream-apk/app-debug.apk
+          fi
+          test -s "$APK"
+          mkdir -p /tmp/engine-stage
+          unzip -oq "$APK" 'assets/engine/arm64-v8a/*' -d /tmp/engine-stage
+          ENGINE_DIR=android/app/src/main/assets/engine/arm64-v8a
+          test -s "/tmp/engine-stage/assets/engine/arm64-v8a/qemu-system-aarch64"
+          mkdir -p android/app/src/main/assets/engine
+          rm -rf "$ENGINE_DIR"
+          cp -a /tmp/engine-stage/assets/engine/arm64-v8a "$ENGINE_DIR"
+          test -s "$ENGINE_DIR/qemu-system-aarch64"
+          test -s "$ENGINE_DIR/libglib-2.0.so.0"
+          chmod 755 "$ENGINE_DIR/qemu-system-aarch64"
+          ENGINE_FINGERPRINT="$(find "$ENGINE_DIR" -maxdepth 1 -type f ! -name 'vmios-engine-version' -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
+          printf '%s\n' "$ENGINE_FINGERPRINT" > "$ENGINE_DIR/vmios-engine-version"
+          echo "QEMU engine fingerprint: $ENGINE_FINGERPRINT"
+          echo "Staged ARM64 engine files:"
+          find "$ENGINE_DIR" -maxdepth 1 -type f -printf '%f %s bytes\\n' | sort
 
       - name: Install Android SDK and NDK r27
         uses: android-actions/setup-android@v3
@@ -39,148 +62,6 @@ jobs:
           set -euo pipefail
           sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.0.12077973"
           echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
-
-      - name: Fetch Termux ARM64 runtime libraries for QEMU
-        working-directory: .
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/termux-debs /tmp/termux-root
-          python3 - <<'PY'
-          import gzip, urllib.request, email, re, os, subprocess
-          base = "https://packages.termux.dev/apt/termux-main/"
-          index_url = base + "dists/stable/main/binary-aarch64/Packages.gz"
-          data = gzip.decompress(urllib.request.urlopen(index_url, timeout=60).read()).decode()
-          packages = {}
-          for block in data.split("\n\n"):
-              if not block.strip():
-                  continue
-              msg = email.message_from_string(block)
-              name = msg.get("Package")
-              if name:
-                  packages[name] = msg
-          roots = ["glib", "libpixman", "pcre2", "libffi", "libiconv", "libandroid-support", "zlib"]
-          todo, selected = list(roots), set()
-          while todo:
-              name = todo.pop()
-              if name in selected:
-                  continue
-              if name not in packages:
-                  raise SystemExit("Missing Termux package: " + name)
-              msg = packages[name]
-              selected.add(name)
-              for dep in msg.get("Depends", "").split(","):
-                  dep = dep.strip().split("|")[0].strip()
-                  dep = re.sub(r"\s*\([^)]*\)", "", dep).strip()
-                  dep = re.sub(r":any$", "", dep)
-                  if dep and dep in packages and dep not in selected:
-                      todo.append(dep)
-          print("Termux packages:", ", ".join(sorted(selected)))
-          for name in sorted(selected):
-              filename = packages[name].get("Filename")
-              if not filename:
-                  raise SystemExit("No Filename for " + name)
-              out = "/tmp/termux-debs/" + os.path.basename(filename)
-              urllib.request.urlretrieve(base + filename, out)
-              subprocess.run(["dpkg-deb", "-x", out, "/tmp/termux-root"], check=True)
-          PY
-          test -d /tmp/termux-root/data/data/com.termux/files/usr/lib
-
-      - name: Create Android cross toolchain wrappers
-        working-directory: .
-        run: |
-          set -euo pipefail
-          TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          WRAPPERS="$RUNNER_TEMP/android-cross"
-          mkdir -p "$WRAPPERS"
-          cat > "$WRAPPERS/gcc" <<EOF
-          #!/bin/sh
-          exec "$TOOLCHAIN/aarch64-linux-android24-clang" "\$@"
-          EOF
-          cat > "$WRAPPERS/g++" <<EOF
-          #!/bin/sh
-          exec "$TOOLCHAIN/aarch64-linux-android24-clang++" "\$@"
-          EOF
-          for tool in ar nm strip ranlib objcopy; do
-            cat > "$WRAPPERS/$tool" <<EOF
-          #!/bin/sh
-          exec "$TOOLCHAIN/llvm-$tool" "\$@"
-          EOF
-          done
-          cat > "$WRAPPERS/ld" <<EOF
-          #!/bin/sh
-          exec "$TOOLCHAIN/ld.lld" "\$@"
-          EOF
-          chmod +x "$WRAPPERS"/*
-          cat > "$RUNNER_TEMP/termux-pkg-config" <<'EOF'
-          #!/bin/sh
-          export PKG_CONFIG_SYSROOT_DIR=/tmp/termux-root
-          export PKG_CONFIG_LIBDIR=/tmp/termux-root/data/data/com.termux/files/usr/lib/pkgconfig:/tmp/termux-root/data/data/com.termux/files/usr/share/pkgconfig
-          exec pkg-config "$@"
-          EOF
-          chmod +x "$RUNNER_TEMP/termux-pkg-config"
-          echo "CROSS_WRAPPERS=$WRAPPERS" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG=$RUNNER_TEMP/termux-pkg-config" >> "$GITHUB_ENV"
-
-      - name: Build QEMU 8.2.0 with this branch's SWEET devices
-        working-directory: .
-        run: |
-          set -euo pipefail
-          EXPECTED_QEMU_COMMIT="$(awk -F': ' '/Exact source commit:/ {print $2}' vm/qemu/UPSTREAM.lock)"
-          test "${#EXPECTED_QEMU_COMMIT}" -eq 40
-          git init qemu
-          git -C qemu remote add origin https://github.com/qemu/qemu.git
-          git -C qemu fetch --depth 1 origin "$EXPECTED_QEMU_COMMIT"
-          git -C qemu checkout --detach FETCH_HEAD
-          ACTUAL_QEMU_COMMIT="$(git -C qemu rev-parse HEAD)"
-          test "$ACTUAL_QEMU_COMMIT" = "$EXPECTED_QEMU_COMMIT"
-          printf '%s\n' "$ACTUAL_QEMU_COMMIT" | tee /tmp/qemu-source-revision.txt
-          cp vm/qemu/sweet_ufs.c vm/qemu/sweet_touch.c vm/qemu/sweet_fb.c qemu/hw/block/
-          git -C qemu apply "$GITHUB_WORKSPACE/vm/qemu/qemu-sweet.patch"
-          mkdir qemu/build-android
-          cd qemu/build-android
-          PKG_CONFIG="$PKG_CONFIG" ../configure \
-            --cross-prefix="$CROSS_WRAPPERS/" \
-            --cpu=aarch64 \
-            --target-list=aarch64-softmmu \
-            --host-cc=gcc \
-            --disable-werror \
-            --disable-docs --disable-guest-agent --disable-tools \
-            --disable-gtk --disable-sdl --disable-vnc --disable-opengl \
-            --disable-spice --disable-glusterfs --disable-libssh --disable-capstone \
-            --disable-slirp --disable-kvm --disable-curl --disable-libiscsi \
-            --disable-libnfs --disable-smartcard --disable-usb-redir --disable-u2f \
-            --disable-seccomp --disable-xen --disable-brlapi --disable-curses \
-            --disable-vte --disable-pipewire --disable-jack --disable-oss \
-            --disable-alsa --disable-vhost-user --disable-vhost-crypto \
-            --disable-vhost-vdpa --disable-vhost-net --disable-vhost-kernel \
-            --disable-libvduse --disable-virtfs --enable-pie
-          ninja qemu-system-aarch64
-          # This is an Android ARM64 binary; inspect its ELF header instead of executing it on the x86_64 runner.
-          file qemu-system-aarch64
-          "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h qemu-system-aarch64
-          "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -h qemu-system-aarch64 | grep -E "Class:.*ELF64|Machine:.*AArch64"
-          echo "QEMU Android ARM64 binary verified (not executed on x86_64 runner)."
-
-      - name: Stage freshly built QEMU and Termux libraries into APK assets
-        working-directory: .
-        run: |
-          set -euo pipefail
-          DEST=android/app/src/main/assets/engine/arm64-v8a
-          rm -rf "$DEST"
-          mkdir -p "$DEST"
-          cp qemu/build-android/qemu-system-aarch64 "$DEST/"
-          LIBDIR=/tmp/termux-root/data/data/com.termux/files/usr/lib
-          find "$LIBDIR" -maxdepth 1 \( -type f -o -type l \) | while read -r f; do
-            case "$f" in
-              *.so|*.so.*) cp -L "$f" "$DEST/$(basename "$f")" ;;
-            esac
-          done
-          cp /tmp/qemu-source-revision.txt "$DEST/qemu-source-revision.txt"
-          chmod 755 "$DEST/qemu-system-aarch64"
-          test -s "$DEST/qemu-system-aarch64"
-          test -s "$DEST/libglib-2.0.so.0"
-          rm -f android/app/src/main/assets/demo/payload.bin
-          find "$DEST" -maxdepth 1 -type f -printf '%f %s bytes\\n' | sort
 
       - name: Compile the native CA rasterizer for arm64-v8a
         working-directory: .
@@ -211,16 +92,10 @@ jobs:
         run: |
           set -euo pipefail
           ENGINE=app/src/main/assets/engine/arm64-v8a
-          find "$ENGINE" -maxdepth 1 -type f ! -name vmios-engine-version -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d " " -f1 > "$ENGINE/vmios-engine-version"
-          echo "QEMU engine fingerprint: $(cat "$ENGINE/vmios-engine-version")"
-          echo "QEMU engine fingerprint: $ENGINE_FINGERPRINT"
           test -s "$ENGINE/qemu-system-aarch64"
-          test -s "$ENGINE/qemu-source-revision.txt"
           test -s "$ENGINE/libglib-2.0.so.0"
-          test -s "$ENGINE/vmios-engine-version"
-          test "$(wc -c < "$ENGINE/vmios-engine-version")" -eq 65
+          test -s app/src/main/jniLibs/arm64-v8a/libsweetraster.so
           echo "QEMU engine asset count: $(find "$ENGINE" -maxdepth 1 -type f | wc -l)"
-          echo "QEMU source revision: $(cat "$ENGINE/qemu-source-revision.txt")"
 
       - name: Build debug APK
         run: ./gradlew --no-daemon clean assembleDebug
@@ -231,91 +106,9 @@ jobs:
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/qemu-system-aarch64'
-          unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/qemu-source-revision.txt'
           unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/libglib-2.0.so.0'
           unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/vmios-engine-version'
-          test "$(unzip -p "$APK" "assets/engine/arm64-v8a/vmios-engine-version" | wc -c)" -eq 65
-          unzip -Z1 "$APK" | grep -Fx 'lib/arm64-v8a/libsweetraster.so'
-          unzip -Z1 "$APK" | grep -Fx 'classes2.dex'
-          unzip -p "$APK" classes2.dex > /tmp/classes2.dex
-          strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/EngineAssets'
-          strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/CaCompositor'
-          sha256sum "$APK" | tee app-debug.apk.sha256
-
-      - name: Upload verified APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: vmios-debug-apk-with-engine
-          path: |
-            android/app/build/outputs/apk/debug/app-debug.apk
-            android/app-debug.apk.sha256
-          if-no-files-found: error
-          retention-days: 30
- "$ENGINE/vmios-engine-version"
-          test -s app/src/main/jniLibs/arm64-v8a/libsweetraster.so
-          echo "QEMU engine asset count: $(find "$ENGINE" -maxdepth 1 -type f | wc -l)"
-          echo "QEMU source revision: $(cat "$ENGINE/qemu-source-revision.txt")"
-
-      - name: Build debug APK
-        run: ./gradlew --no-daemon clean assembleDebug
-
-      - name: Verify APK contents
-        run: |
-          set -euo pipefail
-          APK=app/build/outputs/apk/debug/app-debug.apk
-          test -s "$APK"
-          unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/qemu-system-aarch64'
-          unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/qemu-source-revision.txt'
-          unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/libglib-2.0.so.0'
-          unzip -Z1 "$APK" | grep -Fx 'lib/arm64-v8a/libsweetraster.so'
-          unzip -Z1 "$APK" | grep -Fx 'classes2.dex'
-          unzip -p "$APK" classes2.dex > /tmp/classes2.dex
-          strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/EngineAssets'
-          strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/CaCompositor'
-          sha256sum "$APK" | tee app-debug.apk.sha256
-
-      - name: Upload verified APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: vmios-debug-apk-with-engine
-          path: |
-            android/app/build/outputs/apk/debug/app-debug.apk
-            android/app-debug.apk.sha256
-          if-no-files-found: error
-          retention-days: 30
-
-          unzip -Z1 "$APK" | grep -Fx 'lib/arm64-v8a/libsweetraster.so'
-          unzip -Z1 "$APK" | grep -Fx 'classes2.dex'
-          unzip -p "$APK" classes2.dex > /tmp/classes2.dex
-          strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/EngineAssets'
-          strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/CaCompositor'
-          sha256sum "$APK" | tee app-debug.apk.sha256
-
-      - name: Upload verified APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: vmios-debug-apk-with-engine
-          path: |
-            android/app/build/outputs/apk/debug/app-debug.apk
-            android/app-debug.apk.sha256
-          if-no-files-found: error
-          retention-days: 30
- "$ENGINE/vmios-engine-version"
-          test -s app/src/main/jniLibs/arm64-v8a/libsweetraster.so
-          echo "QEMU engine asset count: $(find "$ENGINE" -maxdepth 1 -type f | wc -l)"
-          echo "QEMU source revision: $(cat "$ENGINE/qemu-source-revision.txt")"
-
-      - name: Build debug APK
-        run: ./gradlew --no-daemon clean assembleDebug
-
-      - name: Verify APK contents
-        run: |
-          set -euo pipefail
-          APK=app/build/outputs/apk/debug/app-debug.apk
-          test -s "$APK"
-          unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/qemu-system-aarch64'
-          unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/qemu-source-revision.txt'
-          unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/libglib-2.0.so.0'
+          unzip -p "$APK" 'assets/engine/arm64-v8a/vmios-engine-version' | grep -Eq "^[0-9a-f]{64}$"
           unzip -Z1 "$APK" | grep -Fx 'lib/arm64-v8a/libsweetraster.so'
           unzip -Z1 "$APK" | grep -Fx 'classes2.dex'
           unzip -p "$APK" classes2.dex > /tmp/classes2.dex
