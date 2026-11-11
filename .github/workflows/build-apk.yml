@@ -218,7 +218,7 @@ jobs:
           test -s "$ENGINE/qemu-source-revision.txt"
           test -s "$ENGINE/libglib-2.0.so.0"
           test -s "$ENGINE/vmios-engine-version"
-          grep -Eq '^[0-9a-f]{64}
+          grep -Eq '^[0-9a-f]{64}$' "$ENGINE/vmios-engine-version"
           echo "QEMU engine asset count: $(find "$ENGINE" -maxdepth 1 -type f | wc -l)"
           echo "QEMU source revision: $(cat "$ENGINE/qemu-source-revision.txt")"
 
@@ -234,7 +234,8 @@ jobs:
           unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/qemu-source-revision.txt'
           unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/libglib-2.0.so.0'
           unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/vmios-engine-version'
-          unzip -p "$APK" 'assets/engine/arm64-v8a/vmios-engine-version' | grep -Eq '^[0-9a-f]{64}          unzip -Z1 "$APK" | grep -Fx 'lib/arm64-v8a/libsweetraster.so'
+          unzip -p "$APK" 'assets/engine/arm64-v8a/vmios-engine-version' | grep -Eq '^[0-9a-f]{64}$'
+          unzip -Z1 "$APK" | grep -Fx 'lib/arm64-v8a/libsweetraster.so'
           unzip -Z1 "$APK" | grep -Fx 'classes2.dex'
           unzip -p "$APK" classes2.dex > /tmp/classes2.dex
           strings /tmp/classes2.dex | grep -F 'dev/vmios/sweetvm/EngineAssets'
