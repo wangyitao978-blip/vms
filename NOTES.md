@@ -1673,3 +1673,9 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - Payload commit `ed0fe416a709b8e7494578362e2339672a0ab9cd` instruments compute encoder state: pipeline name; texture/buffer bindings 0-7; buffer offsets; both dispatch APIs; texture IOSurface IDs, dimensions and formats. Logging capped at 512 entries per dispatch method.
 - This is diagnostics only; compute work is still not executed and blur is not fixed. Next: build artifact, install/test, capture one Control Center interaction, derive actual read/write texture slots and dimensions from ring logs, then implement the opt-in blur path only from observed contracts.
 - Payload workflow run `43047319308` is associated with this commit. The preceding IOSurface symbol fallback build is run `43046045165`; check its result/artifacts before deciding whether a new APK packaging step is needed.
+
+
+### BUILD COMPLETE — compute observation payloads (2026-11-11)
+- Run `43047319308` succeeded for `ed0fe416a709b8e7494578362e2339672a0ab9cd`; both artifacts uploaded: host-raster `13867657031`, guest-local `13868101386`.
+- Verified XNU source: run `43022096198`, commit `065b5d583c95fe0eaa6f2c74b118f6a8acb1cacd`; kernel SHA-256 `09e963f8e71c7aac0eb6ef0b73be01afdf9b12a616e6edc4cb835fecbac4f534`.
+- Build passed with compiler warnings; device validation and Control Center compute log capture remain pending. Start with host-raster artifact, then collect ring logs. Do not treat this as blur implementation.
