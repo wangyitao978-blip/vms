@@ -42,3 +42,9 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Payload workflow still had a push trigger and stale fallback `42945105533`, contradicting the dispatch-only safety note above. For this one build, changed the fallback to the exact successful XNU run `42952041760`; commit `75279aef150cf5676ce66c648c42cf1ed80467e3` triggered Payload run `42953876179`.
 - Immediately restored safe workflow behavior in commit `0523009176fa8f82cbf9fbc6c341099958878e77`: removed push trigger and removed all fallback XNU IDs; future Payload builds require explicit `workflow_dispatch.inputs.xnu_run_id`. This workflow-only follow-up should not trigger another Payload build.
 - Payload run `42953876179` was observed `in_progress` at 2026-11-11 03:36 UTC; final status and artifacts must be checked before reporting completion. It was triggered from commit `75279aef150cf5676ce66c648c42cf1ed80467e3`, whose workflow explicitly selects XNU run `42952041760`.
+
+
+## 2026-11-11 internal render-target decode cache hotfix
+- Verified current `CaCompositor.java` had `if (!uploaded && !internal)`, forcing every F_INTERNAL sample draw to decode the entire surface again. Changed cache hit to reuse any non-upload decoded surface during the current frame; added `Decoded.internal` and explicit internal-entry eviction in `onFlush()`. Existing non-upload eviction remains, so ordinary IOSurface surfaces also retain their prior frame-boundary invalidation behavior.
+- This is the frame-boundary hotfix only. It does not solve multiple guest rewrites of the same surface within one frame; a guest texture-generation protocol would be the more complete follow-up, but is intentionally out of scope here.
+- Payload workflow is dispatch-only and requires an explicit successful XNU run ID. Source commit does not trigger a Payload build; do not add a push trigger or stale fallback. Build/device validation remains pending.
