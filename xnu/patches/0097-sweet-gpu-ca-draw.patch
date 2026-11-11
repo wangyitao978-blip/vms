@@ -282,7 +282,12 @@ index 2835d6a..aeef74d 100644
 +		uint32_t pages = 0;
 +		addr64_t first = 0;
 +		IOReturn result = kIOReturnNotReady;
-+		if (s->memory != NULL && s->allocSize != 0) {
++		if (s->memory == NULL) {
++			IOLog("SWEET GPU: map %u: no memory alloc %u\n",
++			    surface, s->allocSize);
++		} else if (s->allocSize == 0) {
++			IOLog("SWEET GPU: map %u: allocSize 0\n", surface);
++		} else {
 +			result = sweet_surface_send_map(s, surface, &pages, &first);
 +		}
 +		out.ok = result == kIOReturnSuccess ? 1 : 0;
@@ -298,7 +303,7 @@ index 2835d6a..aeef74d 100644
 +			    surface, pages, (uint32_t)s->allocSize, result);
 +		}
 +		s->release();
-+		return kIOReturnSuccess;
++		return result;
 +	}
  	if (selector == kSweetGPUClearSurface) {
  		struct {
@@ -345,6 +350,9 @@ index 7f90c56..6c448ff 100644
 +			    (unsigned long long)span);
  		}
  		if (mem == NULL) {
++			IOLog("SWEET SURF: memory allocation failed bytes=%u wired=%llu limit=%llu\n",
++			    s->allocSize, (unsigned long long)sweet_surface_wired,
++			    (unsigned long long)SWEET_SURFACE_WIRED_MAX);
  			OSAddAtomic64(-(SInt64)s->allocSize, (volatile SInt64 *)&sweet_surface_wired);
 diff --git a/iokit/Kernel/arm/SweetVirtioConsole.cpp b/iokit/Kernel/arm/SweetVirtioConsole.cpp
 index 5488156..9f5d84d 100644
