@@ -78,7 +78,7 @@ final class CaCompositor {
     private static native int nativeInit(String path, long length);
     private static native long nativeTriangle(long[] pages, int total, int pageShift,
             long alloc, int dstBpr, int clipX0, int clipY0, int clipX1, int clipY1,
-            int blend, int[] tex, int texW, int texH, int textured, float[] verts);
+            int blend, int[] tex, int texW, int texH, int textured, int texFn, float[] verts);
 
     static {
         boolean ok;
@@ -392,6 +392,7 @@ final class CaCompositor {
         int clipY1 = b.getInt(52);
         int blend = b.getInt(56);
         int triCount = b.getInt(60);
+        int texFn = b.getInt(84);
         if (drawLogs < 12 && payload.length >= HEADER_BYTES) {
             drawLogs++;
             Log.i(TAG, "draw flags=0x" + Integer.toHexString(flags) + " len="
@@ -460,7 +461,7 @@ final class CaCompositor {
             float cb = b.getFloat(offset + 88);
             float ca = b.getFloat(offset + 92);
             offset += 3 * VERTEX_BYTES;
-            long covered = triangle(dst, x0, y0, x1, y1, blend, tex, textured,
+            long covered = triangle(dst, x0, y0, x1, y1, blend, tex, textured, texFn,
                     ax, ay, au, av, ar, ag, ab, aa,
                     bx, by, bu, bv, br, bg, bb, ba,
                     cx, cy, cu, cv, cr, cg, cb, ca);
@@ -749,7 +750,7 @@ final class CaCompositor {
     }
 
     private long triangle(Surface dst, int clipX0, int clipY0, int clipX1, int clipY1,
-            int blend, Decoded tex, boolean textured,
+            int blend, Decoded tex, boolean textured, int texFn,
             float ax, float ay, float au, float av, float ar, float ag, float ab, float aa,
             float bx, float by, float bu, float bv, float br, float bg, float bb, float ba,
             float cx, float cy, float cu, float cv, float cr, float cg, float cb, float ca) {
@@ -760,7 +761,7 @@ final class CaCompositor {
             return nativeTriangle(dst.pages, dst.total, dst.pageShift, dst.alloc,
                     dst.bpr, clipX0, clipY0, clipX1, clipY1, blend, texels,
                     tex != null ? tex.width : 0, tex != null ? tex.height : 0,
-                    textured ? 1 : 0, v);
+                    textured ? 1 : 0, texFn, v);
         }
         float area = edge(ax, ay, bx, by, cx, cy);
         if (area == 0f) {
@@ -863,10 +864,14 @@ final class CaCompositor {
                                     v = av;
                                 }
                                 sample(tp, tw, th, u, v, SAMPLE);
-                                colR *= SAMPLE[0];
-                                colG *= SAMPLE[1];
-                                colB *= SAMPLE[2];
-                                colA *= SAMPLE[3];
+                                if (texFn == 18 || texFn == 48) {
+                                    colA *= SAMPLE[3];
+                                } else {
+                                    colR *= SAMPLE[0];
+                                    colG *= SAMPLE[1];
+                                    colB *= SAMPLE[2];
+                                    colA *= SAMPLE[3];
+                                }
                             }
                             colA = colA > 1f ? 1f : colA < 0f ? 0f : colA;
                             colR *= colA;

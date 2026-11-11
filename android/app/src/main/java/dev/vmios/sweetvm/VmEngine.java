@@ -235,10 +235,8 @@ public final class VmEngine {
         if (am != null) {
             am.getMemoryInfo(mi);
         }
-        // Avoid making cold boot wait for a full 3 GiB zero-touch pass.
-        // Opt in with sweet_prealloc=1 when prioritizing steady-state paging.
-        boolean prealloc = !resume && cmdline.contains("sweet_prealloc=1")
-                && (am == null || mi.totalMem >= (6L << 30));
+        // Preallocate on cold boot only when at least 4 GiB is currently available.
+        boolean prealloc = !resume && (am == null || mi.availMem >= (4L << 30));
 
         File ram = new File(vmDir, "ram.bin");
         File stub = new File(vmDir, "stub.bin");
@@ -275,11 +273,9 @@ public final class VmEngine {
         String qemu = eng.qemu.getAbsolutePath();
 
         List<String> cmd = new ArrayList<>();
-        // Keep TCG on the big cluster. Android otherwise parks a four-thread
-        // load on the mid cores (1.4-1.7 GHz) and leaves the 3.3 GHz prime
-        // Allow QEMU to use cpu2..cpu7 (six host CPUs) for six guest vCPUs.
+        // Pin the three QEMU vCPUs to host cpu5, cpu6 and cpu7 (affinity mask e0).
         cmd.add("/system/bin/taskset");
-        cmd.add("fc");
+        cmd.add("e0");
         cmd.add(qemu);
         // Multi-CPU boots stay at EL1 (no EL2): QEMU is started with -S and
         // the PSCI conduit is switched to SMC over QMP before cont. The
@@ -291,7 +287,7 @@ public final class VmEngine {
         cmd.add("-smp"); cmd.add(Integer.toString(cpus));
         cmd.add("-m"); cmd.add(RAM_GIB + "G");
         // Single-threaded TCG stays the default; tcgmulti=1 enables MTTCG
-        // for the guest CPU count parsed above (six in the current test profile).
+        // for the guest CPU count parsed above (three in the final profile).
         boolean mttcg = cpus >= 2 && cmdline.contains("tcgmulti=1");
         boolean offload = cmdline.contains("sweetfb_offload=1");
         boolean gpuWire = cmdline.contains("gpu_wire=1");

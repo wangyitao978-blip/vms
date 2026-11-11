@@ -17,12 +17,14 @@ public final class BootConfig {
     private static final String KEY_CMDLINE = "cmdline";
     private static final String KEY_FPS = "fps";
     private static final String KEY_MTTCG = "mttcg";
+    private static final String KEY_OFFLOAD = "offload";
 
     public String rootPath = "";
     public String payloadPath = "";
     public String cmdline = "";
     public int fps = 30;
     public boolean mttcg;
+    public boolean offload = true;
 
     public static BootConfig load(Context ctx) {
         SharedPreferences p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -36,6 +38,7 @@ public final class BootConfig {
         int savedFps = p.getInt(KEY_FPS, 30);
         c.fps = savedFps < 15 ? 30 : Math.min(60, savedFps);
         c.mttcg = p.getBoolean(KEY_MTTCG, false);
+        c.offload = p.getBoolean(KEY_OFFLOAD, true);
         return c;
     }
 
@@ -46,6 +49,7 @@ public final class BootConfig {
                 .putString(KEY_CMDLINE, cmdline)
                 .putInt(KEY_FPS, fps)
                 .putBoolean(KEY_MTTCG, mttcg)
+                .putBoolean(KEY_OFFLOAD, offload)
                 .apply();
     }
 

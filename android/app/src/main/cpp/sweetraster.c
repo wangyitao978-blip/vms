@@ -164,6 +164,7 @@ typedef struct {
     int positive;
     int solid;
     int textured;
+    int tex_fn;
     int texture_pixels;
     float inv;
     float d0x, d1x, d2x;
@@ -279,10 +280,14 @@ raster_band(const RasterCtx *c, int y0, int y1, long *out_covered)
                             }
                             float s[4];
                             sample(tp, c->tex_w, c->tex_h, u, vv, s);
-                            col_r *= s[0];
-                            col_g *= s[1];
-                            col_b *= s[2];
-                            col_a *= s[3];
+                            if (c->tex_fn == 18 || c->tex_fn == 48) {
+                                col_a *= s[3];
+                            } else {
+                                col_r *= s[0];
+                                col_g *= s[1];
+                                col_b *= s[2];
+                                col_a *= s[3];
+                            }
                         }
                         col_a = col_a > 1.0f ? 1.0f :
                             (col_a < 0.0f ? 0.0f : col_a);
@@ -352,7 +357,7 @@ JNIEXPORT jlong JNICALL
 Java_dev_vmios_sweetvm_CaCompositor_nativeTriangle(JNIEnv *env, jclass cls,
     jlongArray jpages, jint total, jint page_shift, jlong alloc, jint dst_bpr,
     jint clip_x0, jint clip_y0, jint clip_x1, jint clip_y1, jint blend,
-    jintArray jtex, jint tex_w, jint tex_h, jint textured, jfloatArray jverts)
+    jintArray jtex, jint tex_w, jint tex_h, jint textured, jint tex_fn, jfloatArray jverts)
 {
     (void)cls;
     if (g_ram == NULL || jpages == NULL || jverts == NULL) {
@@ -426,6 +431,7 @@ Java_dev_vmios_sweetvm_CaCompositor_nativeTriangle(JNIEnv *env, jclass cls,
         c.positive = area > 0.0f;
         c.solid = solid;
         c.textured = textured;
+        c.tex_fn = tex_fn;
         c.texture_pixels = textured &&
             !(au == bu && au == cu && av == bv && av == cv);
         c.inv = 1.0f / area;

@@ -661,10 +661,8 @@ public final class MainActivity extends Activity {
         }
         cmd = ensureQemuArgs(cmd);
         cmd = enableTouch(cmd);
-        // Keep the QEMU -smp count and XNU-visible CPU topology at four,
-        // regardless of whether MTTCG is enabled. MTTCG only controls whether
-        // those vCPUs execute in parallel.
-        cmd = setBootArg(cmd, "cpus", "4");
+        // Keep QEMU -smp and XNU-visible CPU topology at three.
+        cmd = setBootArg(cmd, "cpus", "3");
         if (cfg.mttcg) {
             if (!cmd.contains("tcgmulti=1")) {
                 cmd = (cmd + " tcgmulti=1").trim();
@@ -673,6 +671,11 @@ public final class MainActivity extends Activity {
         // Keep the ticket-lock timeout explicit in the final boot-args string.
         // VmEngine used to append it later, where a 607-byte truncation or a
         // pre-existing tlto_us value could silently leave XNU at 125 ms.
+        if (cfg.offload && !cmd.contains("sweetfb_offload=")) {
+            cmd = (cmd + " sweetfb_offload=1").trim();
+        } else if (!cfg.offload) {
+            cmd = setBootArg(cmd, "sweetfb_offload", "0");
+        }
         if (cfg.mttcg || cmd.contains("tcgmulti=1")) {
             cmd = setBootArg(cmd, "tlto_us", "2000000");
             cmd = setBootArg(cmd, "slto_us", "2000000");
@@ -1066,11 +1069,17 @@ public final class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(150)));
         box.addView(gap(14));
         android.widget.CheckBox mttcgBox = new android.widget.CheckBox(this);
-        mttcgBox.setText("多线程 TCG（启用 4 个 vCPU 真并行）");
+        mttcgBox.setText("多线程 TCG（启用 3 个 vCPU 真并行）");
         mttcgBox.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         mttcgBox.setTextColor(TEXT);
         mttcgBox.setChecked(cfg.mttcg);
         box.addView(mttcgBox);
+        android.widget.CheckBox offloadBox = new android.widget.CheckBox(this);
+        offloadBox.setText("原生 present（零拷贝，出问题可关）");
+        offloadBox.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        offloadBox.setTextColor(TEXT);
+        offloadBox.setChecked(cfg.offload);
+        box.addView(offloadBox);
         TextView fpsLabel = text("画面采样：" + cfg.fps + " fps", 12, DIM, false);
         SeekBar seek = new SeekBar(this);
         // 15..60 fps in steps of 5. The old 1..11 range capped the whole VM
@@ -1089,7 +1098,7 @@ public final class MainActivity extends Activity {
         box.addView(fpsLabel);
         box.addView(seek);
         box.addView(text("QEMU 固定 3 GB 客户机内存；vCPU 数取自 cpus=N，默认单线程 TCG。"
-                + "勾选多线程 TCG 会自动设置 cpus=4 和 tcgmulti=1。参数长度上限 607 字节。",
+                + "勾选多线程 TCG 会自动设置 cpus=3 和 tcgmulti=1。参数长度上限 607 字节。",
                 10, DIM, false));
         AlertDialog d = new AlertDialog.Builder(this)
                 .setTitle("高级选项")
@@ -1103,6 +1112,7 @@ public final class MainActivity extends Activity {
                 .setPositiveButton("保存", (dd, w) -> {
                     cfg.cmdline = et.getText().toString().trim();
                     cfg.mttcg = mttcgBox.isChecked();
+                    cfg.offload = offloadBox.isChecked();
                     cfg.fps = 15 + seek.getProgress() * 5;
                     cfg.save(this);
                     showHome();
