@@ -72,3 +72,11 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Root cause in 0097: its final hunk declares `@@ -603,3 +603,4 @@` but the final empty line was encoded as context (` `), making the old/new hunk counts inconsistent. Changed only that final line prefix to `+`, representing the intended added blank line (3 old lines, 4 new lines).
 - 0098 remains a separate malformed diagnostics patch and has not been modified in this correction. Next XNU run must show 0097 applied without a skip warning, pass the source-tree gate, and only then dispatch Payload with the exact successful run ID.
 - Follow-up in the same correction: 0098's hunk counts were internally consistent, but the file ended immediately after its final context line without a terminating newline; added the missing final newline only. Patch commit: `c161ddb32932b566cc6893331460c6f60aa80c6f`. A fresh run is triggered by this patch commit and should validate both 0097 and 0098 application.
+
+
+## 2026-11-11 XNU #60 patch-format repair follow-up
+- Re-read this ledger and inspected the complete job log for run 42999194797 before editing.
+- Confirmed the XNU compile/link step completed and emitted kernel.development.sweet, but 0097 and 0098 were both skipped as malformed; the source-tree verification then correctly failed and Payload dispatch was skipped. The uploaded kernel artifact is not a validated patched kernel.
+- 0097: final send() hunk declared 7 old lines, but contains 6 context lines and 61 additions. Corrected the header to `@@ -325,6 +345,67 @@`. Commit: b86f1a379e446f094ba9c48ceb3646b8ba2f6013.
+- 0098: removed the unnecessary partial trailing context line `/* swap_set_blit records` from its final hunk and corrected the hunk counts from 6/13 to 5/12. All diagnostic additions remain unchanged. Commit: 03185c26919ed9a06aac4875d6a2c0b195f899c0.
+- These are patch-format corrections only; no runtime source logic was changed. A fresh XNU run must show both patches applied without corrupt-patch warnings and pass the post-build source gate before its exact run ID can trigger Payload. No device validation is claimed.
