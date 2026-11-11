@@ -312,7 +312,7 @@ diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.c
 index 7f90c56..6c448ff 100644
 --- a/iokit/Kernel/arm/SweetSurface.cpp
 +++ b/iokit/Kernel/arm/SweetSurface.cpp
-@@ -73,6 +73,8 @@ static uint32_t      sweet_surface_users[SWEET_SURFACE_MAX_ID];
+@@ -73,7 +73,9 @@ static uint32_t      sweet_surface_users[SWEET_SURFACE_MAX_ID];
  static uint32_t      sweet_surface_next_id = 1;
  static uint32_t      sweet_surface_creates_logged;
  static uint64_t      sweet_surface_wired;       /* bytes of buffer surfaces */
@@ -536,7 +536,7 @@ index 5488156..9f5d84d 100644
  	while (used[1] == q.used) {
  		if (read32(0x70) & (64 | 128)) {
  			online = false;
-@@ -325,6 +345,66 @@ SweetVirtioConsole::send(const void *data, size_t bytes)
+@@ -325,7 +345,67 @@ SweetVirtioConsole::send(const void *data, size_t bytes)
  	return status;
  }
  
@@ -603,3 +603,4 @@ index 5488156..9f5d84d 100644
  IOReturn
  SweetVirtioConsole::receive(void *data, size_t *bytes)
  {
+ 
