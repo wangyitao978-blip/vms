@@ -122,14 +122,6 @@ public final class MainActivity extends Activity {
             long fps = df * 1000 / dt;
             lastFrames = f;
             lastFrameTime = now;
-            if (vmTimer != null) {
-                vmTimer.setText(String.format(Locale.US, "%02d:%02d:%02d",
-                        s / 3600, (s / 60) % 60, s % 60));
-            }
-            if (vmCpu != null) {
-                vmCpu.setText(String.format(Locale.US, "QEMU CPU %.0f%%",
-                        engine.cpuUsagePercent()));
-            }
             if (s % 5 == 0) {
                 long copies = engine.frames();
                 long avgUs = copies > 0 ? engine.copyNanos() / copies / 1000 : 0;
@@ -393,10 +385,6 @@ public final class MainActivity extends Activity {
         displayArea.setBackgroundColor(Color.BLACK);
         FrameLayout.LayoutParams areaLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        areaLp.topMargin = U();
-        areaLp.bottomMargin = U() + dp(8);
-        areaLp.leftMargin = U() + dp(4);
-        areaLp.rightMargin = U() + dp(4);
         screen.addView(displayArea, areaLp);
 
         fbView = new FramebufferView(this);
@@ -491,8 +479,8 @@ public final class MainActivity extends Activity {
             startButton.setAlpha(startButton.isEnabled() ? 1f : 0.35f);
         }
         if (modeOne != null) {
-            boolean canOne = displayArea != null && displayArea.getWidth() > 1125
-                    && displayArea.getHeight() > 2436;
+            boolean canOne = rootView != null && rootView.getWidth() > 1125
+                    && rootView.getHeight() > 2436;
             modeOne.setEnabled(!running && canOne);
             modeOne.setAlpha(modeOne.isEnabled() ? 1f : 0.35f);
         }
@@ -510,7 +498,8 @@ public final class MainActivity extends Activity {
 
     private void updateDisplayGeometry() {
         if (displayArea == null || fbView == null) return;
-        int w = displayArea.getWidth(), h = displayArea.getHeight();
+        int w = rootView != null ? rootView.getWidth() : displayArea.getWidth();
+        int h = rootView != null ? rootView.getHeight() : displayArea.getHeight();
         if (w <= 0 || h <= 0) return;
         float scale;
         if (displayMode == 0) scale = 1f;
