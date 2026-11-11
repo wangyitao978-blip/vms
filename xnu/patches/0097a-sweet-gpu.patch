@@ -2,7 +2,7 @@ diff --git a/iokit/Kernel/arm/SweetGPU.cpp b/iokit/Kernel/arm/SweetGPU.cpp
 index 2835d6a..aeef74d 100644
 --- a/iokit/Kernel/arm/SweetGPU.cpp
 +++ b/iokit/Kernel/arm/SweetGPU.cpp
-@@ -15,13 +15,58 @@
+@@ -15,13 +15,64 @@
  #include <pexpert/pexpert.h>
  #include "SweetSurface.h"
  
@@ -29,6 +29,14 @@ index 2835d6a..aeef74d 100644
 +#define SWEET_GPU_MAP_PAGES 480
  
  extern "C" IOReturn sweet_gpu_wire_send(const void *data, size_t bytes);
++extern "C" IOReturn sweet_gpu_wire_send_wait(const void *data, size_t bytes,
++    uint32_t sequence);
++extern "C" IOReturn
++sweet_gpu_wire_send_wait(const void *data, size_t bytes, uint32_t sequence)
++{
++	(void)sequence;
++	return sweet_gpu_wire_send(data, bytes);
++}
 +
 +struct sweet_gpu_surface_info {
 +	uint32_t pa_lo, pa_hi;
@@ -254,7 +262,8 @@ index 2835d6a..aeef74d 100644
 +		header.version = SWEET_GPU_WIRE_VERSION;
 +		header.operation = SWEET_GPU_WIRE_CA_FLUSH;
 +		header.request = sequence;
-+		IOReturn result = sweet_gpu_wire_send(&header, sizeof(header));
++		IOReturn result = sweet_gpu_wire_send_wait(&header, sizeof(header),
++		    sequence);
 +		if (sweet_gpu_flushes < 16) {
 +			sweet_gpu_flushes++;
 +			IOLog("SWEET GPU: flush seq %u result 0x%x\n", sequence,
