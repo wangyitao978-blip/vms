@@ -661,15 +661,11 @@ public final class MainActivity extends Activity {
         }
         cmd = ensureQemuArgs(cmd);
         cmd = enableTouch(cmd);
+        // Keep the QEMU -smp count and XNU-visible CPU topology at four,
+        // regardless of whether MTTCG is enabled. MTTCG only controls whether
+        // those vCPUs execute in parallel.
+        cmd = setBootArg(cmd, "cpus", "4");
         if (cfg.mttcg) {
-            // Four guest CPUs are the current measured MTTCG profile.
-            java.util.regex.Matcher cpu = java.util.regex.Pattern
-                    .compile("(^|\\s)cpus=\\d+").matcher(cmd);
-            if (cpu.find()) {
-                cmd = cpu.replaceAll("$1cpus=4");
-            } else {
-                cmd = (cmd + " cpus=4").trim();
-            }
             if (!cmd.contains("tcgmulti=1")) {
                 cmd = (cmd + " tcgmulti=1").trim();
             }
