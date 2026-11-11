@@ -27,9 +27,17 @@ jobs:
           XNU_RUN_ID: ${{ github.event.inputs.xnu_run_id }}
         run: |
           set -euo pipefail
-          # A push can start this workflow while the matching XNU run is
-          # still uploading its artifact. Wait for that exact run instead of
-          # failing immediately and leaving a stale payload as the only build.
+          # Reject failed runs, wrong branches, and non-XNU workflows first.
+          RUN_JSON="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$XNU_RUN_ID")"
+          echo "$RUN_JSON" | jq -e '
+            .status == "completed" and
+            .conclusion == "success" and
+            .head_branch == "xun" and
+            .path == ".github/workflows/xnu.yml"
+          ' >/dev/null
+          XNU_HEAD_SHA="$(echo "$RUN_JSON" | jq -r '.head_sha')"
+          echo "XNU_RUN_ID=$XNU_RUN_ID" >> "$GITHUB_ENV"
+          echo "XNU_HEAD_SHA=$XNU_HEAD_SHA" >> "$GITHUB_ENV"
           downloaded=0
           for attempt in $(seq 1 90); do
             rm -rf /tmp/upstream
@@ -50,7 +58,11 @@ jobs:
           # PSCI conduit to SMC over QMP before continuing the paused VM.
           # Do not run patch-qemu-psci.py here: it changes SMC to HVC and
           # conflicts with the Android engine's EL1 + SMC configuration.
-          shasum -a 256 /tmp/upstream/kernel.development.sweet
+          XNU_KERNEL_SHA256="$(shasum -a 256 /tmp/upstream/kernel.development.sweet | awk '{print $1}')"
+          echo "XNU_KERNEL_SHA256=$XNU_KERNEL_SHA256" >> "$GITHUB_ENV"
+          echo "- XNU run: $XNU_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+          echo "- XNU branch/commit: xun / $XNU_HEAD_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- kernel.development.sweet SHA-256: $XNU_KERNEL_SHA256" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install upstream plugin linker and IPSW utility
         run: |
@@ -114,6 +126,11 @@ jobs:
             dist/host-raster/sweet-qemu-gpu-payload.bin \
             --cmdline "$CMDLINE"
           cp /tmp/upstream/kernel.development.sweet dist/host-raster/
+          cat > dist/host-raster/XNU-PROVENANCE.txt <<EOF
+          xnu_run_id=$XNU_RUN_ID
+          xnu_head_sha=$XNU_HEAD_SHA
+          kernel_sha256=$XNU_KERNEL_SHA256
+          EOF
           cat > dist/host-raster/TEST-MODE.txt <<'EOF'
           MODE: android-host-raster
           sweet_stage_local = 0
@@ -161,6 +178,11 @@ jobs:
             dist/guest-local-raster/sweet-qemu-gpu-payload.bin \
             --cmdline "$CMDLINE"
           cp /tmp/upstream/kernel.development.sweet dist/guest-local-raster/
+          cat > dist/guest-local-raster/XNU-PROVENANCE.txt <<EOF
+          xnu_run_id=$XNU_RUN_ID
+          xnu_head_sha=$XNU_HEAD_SHA
+          kernel_sha256=$XNU_KERNEL_SHA256
+          EOF
           cat > dist/guest-local-raster/TEST-MODE.txt <<'EOF'
           MODE: guest-local-raster
           sweet_stage_local = 1
