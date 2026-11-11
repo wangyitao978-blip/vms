@@ -60,3 +60,11 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Each Payload artifact includes XNU-PROVENANCE.txt with XNU run ID, source commit, and kernel SHA-256; SHA256SUMS contains the kernel hash and the Actions job summary reports the same provenance.
 - Normal builds are dispatched automatically by the XNU workflow after the verified kernel artifact is uploaded. Manual dispatch remains a recovery path and still requires an explicit run ID.
 - The malformed 0097 patch and XNU source-tree verification gate are recorded on xun/FIX.md; this branch change only hardens provenance and packaging.
+
+
+## 2026-11-11 ring10 IOSurfaceRelease symbol fix
+- User supplied ring10 evidence: `sweet_render_surface_create` failed its required-symbol gate because `dlsym(ios, "IOSurfaceRelease")` returned NULL; IOSurface objects are CF objects and must be released with CoreFoundation `CFRelease` when the optional IOSurfaceRelease export is absent.
+- Applied to the actual Payload source branch (not `xun`, whose SweetMetal.m does not contain `sweet_render_surface_create`): commit `1e45716ec6b0faeeafcfd5f957555d9f7df916da`, file `vm/metal/SweetMetal.m`.
+- Removed `release_surface == 0` from the required-symbol condition. Both failure cleanup paths now use `IOSurfaceRelease` when exported, otherwise `cf_release`. No changes to allocation dimensions, render routing, or heap fallback.
+- Source-level verification: required-symbol gate no longer includes `release_surface`; both cleanup paths contain the CFRelease fallback. Build/device validation is pending; do not claim IOSurface allocation succeeds until a fresh Payload artifact reports successful render-target creation and host routing.
+- Compute blur is NOT implemented by this commit. The current Payload source still returns `SweetOpaque` for compute PSOs and an empty `SweetCommandEncoder` for compute encoding. The function names identify candidate kernels but do not establish texture indices, input/output aliasing, pixel formats, or dispatch dimensions. Implementing a guessed CPU convolution now risks corrupting CA render targets. Next safe step is to instrument/store the compute PSO name, texture/buffer bindings, and dispatch dimensions, then implement the observed contract behind an opt-in switch (default off). No claim of blur support.
