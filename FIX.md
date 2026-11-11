@@ -73,3 +73,11 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Removed `bin` from Android `noCompress` configuration so the payload remains compressed in the APK; no legacy `aaptOptions { noCompress "bin" }` was added.
 - Build must be checked against the final APK branch head after this ledger update. CI artifact success is not device validation; on device verify `files/vm/sweet-qemu-gpu-payload.bin` and `files/vm/payload.ver` after first launch.
 - User instruction: do not ask for another “continue”; carry out the bundling and report only after the APK build and artifact verification complete.
+
+
+## 2026-11-12 Host Raster payload bundled APK build verified
+- APK source commit with working extraction: `2e6e509a8c15de08278b8f37568dc301b531ecbb`. Final successful APK workflow run: `43084051387`, branch `apk`, conclusion `success`; artifact `vmios-debug-apk-with-engine` ID `13886195524`, size 56,799,786 bytes. APK SHA-256: `bee0238250de0893f7ded540ee5f91fc266dd262f8fbe7edd858900c7492a994`.
+- CI explicitly completed the Host Raster injection step and post-build APK verification. Both `assets/boot/sweet-qemu-gpu-payload.bin` and `assets/boot/payload.sha256` were found inside the APK; extracted payload SHA-256 matched `7204f83ba7a8370f1134915fc2f47516e66366e038c2d6f62bb06d5b584c4e8d`. Only artifact/run `43079641260` Host Raster was downloaded; Guest Local was not requested or included.
+- `BootAssets.ensure` compiled successfully after replacing unavailable generated `BuildConfig.VERSION_CODE` with PackageManager version metadata and correcting the Java line break. First-run extraction and hash validation are implemented; actual device extraction remains untested until installed.
+- CI path filters now limit automatic APK builds to Android source/assets and the APK workflow; FIX/NOTES/README-only updates do not trigger redundant builds. Workflow commit `18083dc84949cd3a3166e6106bbd27b8bfc080d3`; its validation build run is being checked separately.
+- Device verification is still required: after first launch, check `files/vm/sweet-qemu-gpu-payload.bin` and `files/vm/payload.ver` with `run-as`. CI success does not prove on-device extraction or boot.
