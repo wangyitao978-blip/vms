@@ -2204,7 +2204,6 @@ sweet_texture_create_surface(unsigned long width, unsigned long height,
 		free(tex_pixels);
 		tex_pixels = 0;
 	}
-	tex_surface = 0;
 	static unsigned int upload_done_logs;
 	unsigned long readable = sweet_readable_extent(bytes, need);
 	unsigned long copy = readable < need ? readable : need;
@@ -3435,7 +3434,6 @@ sweet_texture_surface(id texture)
 					tex_id = r.tex_surface;
 					tex_flags = SWEET_CA_F_TEXTURED | SWEET_CA_F_INTERNAL;
 				}
-			}
 			} else {
 				host_ok = 0;
 			}
