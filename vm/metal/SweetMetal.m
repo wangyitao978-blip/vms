@@ -2997,9 +2997,9 @@ typedef struct {
 	    sel_registerName("height"));
 	enc_map.bytes_per_row = ((unsigned long (*)(id, SEL))objc_msgSend)(
 	    texture, sel_registerName("bytesPerRow"));
-	if (enc_map.bytes_per_row != enc_map.width * 4) {
+	if (enc_map.bytes_per_row < enc_map.width * 4) {
 		dprintf(console_fd,
-		    "SWEETMETAL: skip offscreen %lux%lu bpr=%lu (not 8-bit)%c",
+		    "SWEETMETAL: skip offscreen %lux%lu bpr=%lu (invalid stride)%c",
 		    enc_map.width, enc_map.height, enc_map.bytes_per_row, 10);
 		enc_map.base = 0;
 		enc_map.width = 0;
