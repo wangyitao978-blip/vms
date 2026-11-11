@@ -1,6 +1,12 @@
 name: Build upstream-faithful Android GPU payload
 
 on:
+  push:
+    branches:
+      - payload
+    paths:
+      - vm/metal/SweetMetal.m
+      - .github/workflows/build-vmios-full-gpu-payload.yml
   workflow_dispatch:
     inputs:
       xnu_run_id:
@@ -13,7 +19,7 @@ permissions:
 
 jobs:
   payload:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -24,7 +30,7 @@ jobs:
       - name: Download the successful XNU kernel with its SMC PSCI conduit
         env:
           GH_TOKEN: ${{ github.token }}
-          XNU_RUN_ID: ${{ github.event.inputs.xnu_run_id }}
+          XNU_RUN_ID: ${{ github.event.inputs.xnu_run_id || '43022096198' }}
         run: |
           set -euo pipefail
           # Reject failed runs, wrong branches, and non-XNU workflows first.
