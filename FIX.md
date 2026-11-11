@@ -50,3 +50,10 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Runtime validation remains pending. Do not change lock timeout parameters or unrelated rendering paths in this repair.
 
 - Follow-up correction: fixed the XNU workflow GH_TOKEN expression so the automatic workflow_dispatch call receives github.token (commit fb9da4f37dc3feb58dbd3928b49406e9fac252b8).
+
+
+## 2026-11-11 XNU #58 validation-gate failure follow-up
+- XNU run `42969089309` completed the kernel Build step, including compilation of `SweetSurface.cpo` and `SweetGPU.cpo`, but failed at the post-build verification step; Payload auto-dispatch was skipped. Do not use its artifacts as a validated kernel.
+- Exact patch-tool error: `patch fragment without header at line 325: @@ -80,6 +82,17 @@ SweetSurface::free()`.
+- Root cause found in `0097-sweet-gpu-ca-draw.patch`: an unprefixed empty line between the first and second SweetSurface hunks prematurely terminated the first hunk. Changed that empty context line to a valid context line (single leading space). Patch commit: `86ad44f7da77886f13726e0df3e31f922e36ac8a`.
+- Next verification required: a fresh XNU run must show 0097 applied without skip/reject, pass the SweetSurface/SweetGPU source gate, and only then trigger Payload with that exact run ID. No device validation yet.
