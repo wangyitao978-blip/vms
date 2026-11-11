@@ -150,59 +150,6 @@ jobs:
             sweet-qemu-gpu-payload.bin qemu-gpu.adt SweetMetalAccel.sgb \
             kernel.development.sweet > SHA256SUMS)
 
-      - name: Build guest-local variant (TCG software rasterizer)
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path("vm/metal/SweetMetal.m")
-          source = path.read_text()
-          old = "static int sweet_stage_local = 0;"
-          new = "static int sweet_stage_local = 1;"
-          if source.count(old) != 1:
-              raise SystemExit("Expected exactly one default sweet_stage_local=0 switch")
-          path.write_text(source.replace(old, new))
-          PY
-
-          mkdir -p dist/guest-local-raster
-          LD="$(brew --prefix lld)/bin/ld64.lld" \
-            CLANG="$(xcrun --find clang)" \
-            bash tools/build-sweetmetal.sh
-          cp vm/metal/build/SweetMetalAccel.sgb dist/guest-local-raster/
-          python3 tools/gpu-bundle.py list dist/guest-local-raster/SweetMetalAccel.sgb
-
-          python3 tools/mkadt.py dist/guest-local-raster/qemu-gpu.adt \
-            --qemu --qemu-cpus 4 \
-            --gpu-wire \
-            --canvas-width 1125 --canvas-height 2436 \
-            --gpu-bundle dist/guest-local-raster/SweetMetalAccel.sgb
-
-          CMDLINE="$(python3 tools/bootargs.py vm --add gpu_wire=1 sweetmetal=1)"
-          printf 'guest-local-raster cmdline: %s\\n' "$CMDLINE"
-          python3 tools/mkpayload.py \
-            /tmp/upstream/kernel.development.sweet \
-            dist/guest-local-raster/qemu-gpu.adt \
-            dist/guest-local-raster/sweet-qemu-gpu-payload.bin \
-            --cmdline "$CMDLINE"
-          cp /tmp/upstream/kernel.development.sweet dist/guest-local-raster/
-          cat > dist/guest-local-raster/XNU-PROVENANCE.txt <<EOF
-          xnu_run_id=$XNU_RUN_ID
-          xnu_head_sha=$XNU_HEAD_SHA
-          kernel_sha256=$XNU_KERNEL_SHA256
-          EOF
-          cat > dist/guest-local-raster/TEST-MODE.txt <<'EOF'
-          MODE: guest-local-raster
-          sweet_stage_local = 1
-          Full-screen CA draw batches are not sent to Android; SweetMetal uses
-          its Guest-side software rasterizer under QEMU/TCG.
-          Staging copy and IOMobileFramebuffer swap remain unchanged.
-          This mode may be substantially slower; it is a diagnostic comparison.
-          Use the same Android APK as the host-raster variant.
-          EOF
-          (cd dist/guest-local-raster && shasum -a 256 \
-            sweet-qemu-gpu-payload.bin qemu-gpu.adt SweetMetalAccel.sgb \
-            kernel.development.sweet > SHA256SUMS)
-
       - name: Upload host-raster test files
         uses: actions/upload-artifact@v4
         with:
@@ -211,10 +158,3 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload guest-local-raster test files
-        uses: actions/upload-artifact@v4
-        with:
-          name: vmios-guest-local-raster-payload
-          path: dist/guest-local-raster/
-          if-no-files-found: error
-          retention-days: 30

@@ -1026,7 +1026,7 @@ sweet_ca_flush(void)
 		if (sweet_ca_tx_failures >= 3) {
 			sweet_ca_disabled = 1;
 		}
-		if (sweet_ca_logs < 16) {
+		if (sweet_ca_tx_failures <= 8 || (sweet_ca_tx_failures % 64) == 0) {
 			sweet_ca_logs++;
 			dprintf(console_fd,
 			    "SWEETMETAL: host flush seq %u failed 0x%x%c",
@@ -3114,8 +3114,12 @@ sweet_raster_triangle(SweetRaster *r, unsigned long i0, unsigned long i1,
 			} else if (r->tex != 0) {
 				float t[4];
 				sweet_texel(r, u, v, t);
-				for (int k = 0; k < 4; k++) {
-					col[k] *= t[k];
+				if (r->tex_fn == 18 || r->tex_fn == 48) {
+					col[3] *= t[3];
+				} else {
+					for (int k = 0; k < 4; k++) {
+						col[k] *= t[k];
+					}
 				}
 			}
 			sweet_blend_pixel(r, x, y, col);
@@ -3347,7 +3351,7 @@ typedef struct {
 		return;
 	}
 	((void (*)(id, SEL))objc_msgSend)(texture, sel_registerName("markRendered"));
-	if (sweet_offscreen_target_logs < 32) {
+	if (sweet_offscreen_target_logs < 8) {
 		sweet_offscreen_target_logs++;
 		dprintf(console_fd,
 		    "SWEETMETAL: render target offscreen id=%u %lux%lu bpr=%lu base=%p%c",
