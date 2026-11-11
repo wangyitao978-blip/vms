@@ -3,6 +3,9 @@ name: Build Android APK
 on:
   push:
     branches: [ apk ]
+    paths:
+      - '.github/workflows/build-apk.yml'
+      - 'android/**'
   workflow_dispatch:
 
 permissions:
