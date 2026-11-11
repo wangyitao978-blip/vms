@@ -385,6 +385,7 @@ final class CaCompositor {
         int texH = b.getInt(28);
         int texBpr = b.getInt(32);
         int texFmt = b.getInt(36);
+        int texGeneration = b.getInt(84);
         int clipX0 = b.getInt(40);
         int clipY0 = b.getInt(44);
         int clipX1 = b.getInt(48);
@@ -421,7 +422,7 @@ final class CaCompositor {
         boolean textured = (flags & F_TEXTURED) != 0;
         Decoded tex = null;
         if (textured) {
-            tex = texture(flags, texId, texW, texH, texBpr, texFmt);
+            tex = texture(flags, texId, texW, texH, texBpr, texFmt, texGeneration);
             if (tex == null) {
                 dropped++;
                 return;
@@ -477,11 +478,13 @@ final class CaCompositor {
 
     /* ---- texture decoding ------------------------------------------------ */
 
-    private Decoded texture(int flags, int id, int width, int height, int bpr, int fmt) {
+    private Decoded texture(int flags, int id, int width, int height, int bpr,
+            int fmt, int generation) {
         boolean uploaded = (flags & F_UPLOAD_TEX) != 0;
+        boolean internal = (flags & F_INTERNAL) != 0;
         Decoded cached = decoded.get(id);
         if (cached != null && cached.width == width && cached.height == height) {
-            if (!uploaded) {
+            if (!uploaded && (!internal || cached.gen == generation)) {
                 return cached;
             }
             Upload cu = uploads.get(id);
@@ -495,7 +498,6 @@ final class CaCompositor {
         }
         int[] out = new int[width * height];
         int uploadGeneration = 0;
-        boolean internal = (flags & F_INTERNAL) != 0;
         if ((flags & F_UPLOAD_TEX) != 0) {
             Upload u = uploads.get(id);
             if (u == null || !u.ready) {
@@ -523,7 +525,7 @@ final class CaCompositor {
         d.width = width;
         d.height = height;
         d.fromUpload = uploadGeneration != 0;
-        d.gen = uploadGeneration;
+        d.gen = uploaded ? uploadGeneration : (internal ? generation : 0);
         decoded.put(id, d);
         decodeCount++;
         return d;
