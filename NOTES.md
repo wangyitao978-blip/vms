@@ -1,5 +1,18 @@
 # vmios working notes
 
+### >>> ACTIVE: 三分支移植完成；最终 APK / XNU / Payload 构建成功（2026-11-11 10:31 +08:00）<<<
+
+- 最终 branch HEAD：apk `de4b4831e0fb`；xun `e40ac0766304`；payload `1b8cc968c3c8`。
+- 最终 APK Run [42946498465](https://github.com/wangyitao978-blip/vms/actions/runs/42946498465)：success，artifact `vmios-debug-apk-with-engine` 50,606,401 bytes；新增 `MainActivity.iosCmdline()` 始终写入 `cpus=4`，MTTCG 开关仍独立控制并行模式。
+- XNU Run [42945105533](https://github.com/wangyitao978-blip/vms/actions/runs/42945105533)：success；0097 patch 已应用并编译 SweetSurface/SweetGPU/SweetVirtioConsole。
+- Payload Run [42945741772](https://github.com/wangyitao978-blip/vms/actions/runs/42945741772)：success；日志确认下载指定 XNU Run 42945105533 的 kernel；host-raster 与 guest-local-raster 两个 artifacts 均存在。
+- `CaCompositor.texture()` 内部 render-target 缓存失效修复已存在；Payload 当前 IOSurface 映射路径及 seed/unmap、mapped-host path、FourCC 识别也已存在，无需重复合并。
+- 不整支合并旧分支；不移植会改变画面尺寸/触摸映射的 Framebuffer 1:1 改动或删除 VM 控件的改动；不恢复 cpus=2。
+- 未解决：XNU `s->memory == NULL` 的实际分配根因修复未在候选分支中找到；本轮只完成错误传播和诊断。设备端尚未测试。
+- 详细记录见 `fix/操作记录.md`。
+
+---
+
 ### >>> ACTIVE: 三分支修复已移植并构建成功（2026-11-11 10:27 +08:00）<<<
 
 - 用户要求：将审计发现的未合并修复移植到当前 `apk`、`xun`、`payload`；不反复确认。
