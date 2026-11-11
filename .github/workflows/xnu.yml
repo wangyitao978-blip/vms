@@ -25,6 +25,10 @@ concurrency:
   group: xnu-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  actions: write
+  contents: read
+
 env:
   DXB_REPO: https://github.com/blacktop/darwin-xnu-build
   DXB_SHA: 663906528d1cd5ea8fde7de6f16de73db9511549
@@ -109,6 +113,23 @@ jobs:
           MAKEFLAGS: ${{ inputs.keep_going == 'false' && '' || '-k' }}
         run: bash build.sh
 
+      - name: Verify SweetSurface patch is present in the built source tree
+        if: success()
+        run: |
+          set -euo pipefail
+          SURFACE="dxb/xnu/iokit/Kernel/arm/SweetSurface.cpp"
+          GPU="dxb/xnu/iokit/Kernel/arm/SweetGPU.cpp"
+          test -s "$SURFACE"
+          test -s "$GPU"
+          grep -q 'SWEET SURF: memory' "$SURFACE"
+          grep -q 'kSweetGPUSurfaceMap' "$GPU"
+          echo "0097 verified in patched XNU source tree."
+          {
+            echo '### XNU patch verification'
+            echo '- 0097 SweetSurface allocation and GPU surface-map changes are present in the source tree.'
+            echo "- XNU source commit: $GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Package build tree for local compiles
         if: always()
         run: |
@@ -157,3 +178,19 @@ jobs:
           name: xnu-kernel
           path: out/
           if-no-files-found: warn
+
+      - name: Trigger Payload build with this exact XNU run
+        if: success()
+        env:
+          GH_TOKEN: \${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run build-vmios-full-gpu-payload.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref payload \
+            -f xnu_run_id="$GITHUB_RUN_ID"
+          {
+            echo '### Payload dispatch'
+            echo "- Triggered payload branch with xnu_run_id=$GITHUB_RUN_ID"
+            echo "- XNU source commit: $GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
