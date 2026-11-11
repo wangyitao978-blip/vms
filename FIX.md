@@ -48,3 +48,8 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Verified current `CaCompositor.java` had `if (!uploaded && !internal)`, forcing every F_INTERNAL sample draw to decode the entire surface again. Changed cache hit to reuse any non-upload decoded surface during the current frame; added `Decoded.internal` and explicit internal-entry eviction in `onFlush()`. Existing non-upload eviction remains, so ordinary IOSurface surfaces also retain their prior frame-boundary invalidation behavior.
 - This is the frame-boundary hotfix only. It does not solve multiple guest rewrites of the same surface within one frame; a guest texture-generation protocol would be the more complete follow-up, but is intentionally out of scope here.
 - Payload workflow is dispatch-only and requires an explicit successful XNU run ID. Source commit does not trigger a Payload build; do not add a push trigger or stale fallback. Build/device validation remains pending.
+
+
+## 2026-11-11 payload build-source correction
+- Confirmed `.github/workflows/build-vmios-full-gpu-payload.yml` checks out the `payload` branch and runs `tools/build-sweetmetal.sh`; the APK workflow does not reference/build `vm/metal/SweetMetal.m`. Therefore the effective IOSurface threshold/log-throttle change is also committed to `payload`, alongside the `CaCompositor.java` cache hotfix. The equivalent change on `apk` is only a source mirror and is not evidence that an APK contains the Metal plugin change.
+- Payload source commit: 2481d12256fd61c2c078106901b9f0f4708a93d3. Payload FIX update follows. The payload workflow remains dispatch-only; no build was started by these source pushes.
