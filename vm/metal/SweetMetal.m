@@ -2004,6 +2004,7 @@ static unsigned long sweet_texel_bpp(unsigned long fmt);
 - (unsigned long)bytesPerRow;
 - (int)ensureRenderPixels;
 - (void)releaseRenderSurface;
+- (int)hasRenderSurface;
 - (void)markRendered;
 - (unsigned long)rendered;
 @end
@@ -2127,6 +2128,11 @@ sweet_texture_create_surface(unsigned long width, unsigned long height,
 }
 
 @implementation SweetTexture
+
+- (int)hasRenderSurface
+{
+	return tex_ref != 0;
+}
 
 - (void)releaseRenderSurface
 {
@@ -2974,7 +2980,9 @@ typedef struct {
 		return;
 	}
 	if (((unsigned int (*)(id, SEL))objc_msgSend)(texture,
-	    sel_registerName("surfaceID")) != 0) {
+	    sel_registerName("surfaceID")) != 0 &&
+	    ((int (*)(id, SEL))objc_msgSend)(texture,
+	    sel_registerName("hasRenderSurface")) == 0) {
 		return;
 	}
 	if (((int (*)(id, SEL))objc_msgSend)(texture,
