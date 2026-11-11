@@ -516,7 +516,7 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void setImmersive(boolean enabled) {
+    private void toggleImmersiveUi(boolean enabled) {
         immersiveUi = enabled;
         applyImmersiveVisibility();
         if (enabled) toast("点击相同位置即可呼出按钮");
@@ -532,7 +532,7 @@ public final class MainActivity extends Activity {
             child.setVisibility(immersiveUi ? View.GONE : View.VISIBLE);
         }
         if (immersiveUi) {
-            screen.setOnClickListener(v -> setImmersive(false));
+            screen.setOnClickListener(v -> toggleImmersiveUi(false));
             if (fbView != null) fbView.setOnClickListener(v -> setImmersive(false));
         } else {
             screen.setOnClickListener(null);
