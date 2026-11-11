@@ -153,6 +153,25 @@ public final class MainActivity extends Activity {
         setContentView(rootView);
         adoptExistingFiles();
         showHome();
+        beginBundledPayloadInstall();
+    }
+
+    private void beginBundledPayloadInstall() {
+        final File bundled = BootAssets.payloadFile(this);
+        new Thread(() -> {
+            try {
+                BootAssets.ensure(getApplicationContext(), BuildConfig.VERSION_CODE);
+                runOnUiThread(() -> {
+                    cfg.payloadPath = bundled.getAbsolutePath();
+                    cfg.save(this);
+                    showHome();
+                    toast("内置 Host Raster payload 已就绪");
+                });
+            } catch (Exception e) {
+                android.util.Log.e("sweetvm", "bundled payload extraction failed", e);
+                runOnUiThread(() -> toast("内置 payload 释放失败：" + e.getMessage()));
+            }
+        }, "sweetvm-payload-assets").start();
     }
 
     private void adoptExistingFiles() {
@@ -622,6 +641,15 @@ public final class MainActivity extends Activity {
     }
 
     private void startIos(boolean resume) {
+        File bundledPayload = BootAssets.payloadFile(this);
+        if (!bundledPayload.isFile() || bundledPayload.length() == 0) {
+            toast("内置 Host Raster payload 正在释放或不可用，请稍后重试");
+            return;
+        }
+        if (!bundledPayload.getAbsolutePath().equals(cfg.payloadPath)) {
+            cfg.payloadPath = bundledPayload.getAbsolutePath();
+            cfg.save(this);
+        }
         File root = cfg.rootFile();
         File payload = cfg.payloadFile();
         if (root == null || !root.isFile()) {
