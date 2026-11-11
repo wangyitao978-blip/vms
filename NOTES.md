@@ -1689,3 +1689,5 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - Added BootAssets first-run extraction with atomic file write, payload hash verification, and app-version/hash marker. MainActivity defaults to this bundled payload. Actual device extraction is pending.
 - Earlier failed attempts: verification block was initially placed against the upstream QEMU APK rather than the final APK, then compilation caught a missing BuildConfig and a literal escaped newline. Both were corrected; the successful run above includes the final source and all verification steps.
 - Workflow push paths now include only `.github/workflows/build-apk.yml` and `android/**`, so ledger/README-only edits no longer cause redundant APK builds.
+
+- Final APK after workflow path-filter validation: run `43084384868` success; artifact ID `13884644789` (56,799,787 bytes); APK SHA-256 `92596235e296278653f1f262d60e935b2cff91e01b060edc3140c02834b8ebec`. CI again verified the embedded Host Raster payload hash `7204f83ba7a8370f1134915fc2f47516e66366e038c2d6f62bb06d5b584c4e8d`.
