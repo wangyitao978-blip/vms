@@ -421,7 +421,7 @@ public final class MainActivity extends Activity {
         bottom.setGravity(Gravity.CENTER);
         bottom.setPadding(0, 0, 0, 0);
         bottom.setBackgroundColor(0xFF111111);
-        startButton = bottomButton("▶", "启动", true, () -> {
+        startButton = bottomButton("启动", "启动", true, () -> {
             if (!vmActive && cfg.rootFile() != null) startIos();
         });
         bottom.addView(startButton, new LinearLayout.LayoutParams(U(), U()));
@@ -431,7 +431,7 @@ public final class MainActivity extends Activity {
         bottom.addView(modeShrink, new LinearLayout.LayoutParams(U()*3, U()));
         modeFull = bottomButton("全屏", "等比铺满", !running, () -> setDisplayMode(2));
         bottom.addView(modeFull, new LinearLayout.LayoutParams(U()*3, U()));
-        immersiveButton = bottomButton("◉", "沉浸", true, () -> toggleImmersiveUi(true));
+        immersiveButton = bottomButton("沉浸", "沉浸", true, () -> toggleImmersiveUi(true));
         bottom.addView(immersiveButton, new LinearLayout.LayoutParams(U(), U()));
         FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(
                 U()*11, U(), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
