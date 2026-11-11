@@ -1660,3 +1660,10 @@ Verified on the K70 Pro: `SWEET HID: touch 0 down/up` in pairs, and one swipe to
 `VmEngine` now takes `tcgmulti=1` from the command line and uses `-accel tcg,thread=multi`; `tools/bootargs.py vm-mttcg` is the profile. It boots, shows five threads in `/proc/<pid>/cmdline`, and does **not** trip the pset0 ticket lock - but it is not the fix for responsiveness, the software rasterizer is.
 
 The APK can be built on Windows without Android Studio; the whole recipe (JDK 17, SDK 35, Gradle 8.9 from mirrors, `android.overridePathCheck=true` for the CJK path, and the signature mismatch that forces an uninstall + 16 GiB image re-push) is in `android/README.md`.
+
+
+### ACTIVE HANDOFF — ring10 Metal renderer fixes (2026-11-11)
+- Payload branch source change committed: `1e45716ec6b0faeeafcfd5f957555d9f7df916da` in `vm/metal/SweetMetal.m`. IOSurfaceRelease is now optional; cleanup falls back to CoreFoundation CFRelease. This directly addresses ring10's `reason=IOSurface symbols` failure.
+- FIX.md records the evidence and scope in commit `d2f7f2b77a2ab19c572315520726ef5abb5b1c7d`.
+- Not yet built or device-verified. The payload workflow is dispatch-only and requires an explicit successful XNU run ID; do not add a push trigger or stale fallback.
+- Compute blur remains unimplemented. Current code still returns SweetOpaque for compute pipeline states and an empty SweetCommandEncoder. Next safe step: record compute PSO name, bound texture/buffer indices, dimensions, and dispatch sizes; use those observations to implement a guarded opt-in software path. Do not guess resource indices or claim blur is fixed.
