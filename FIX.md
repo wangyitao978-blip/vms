@@ -64,3 +64,10 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Independent audit of every 0097 unified-diff hunk found two remaining formatting defects: first SweetSurface hunk declared 6/8 but contained 7/9 lines; the send() hunk declared 6/66 but contained 7/67 after its unprefixed empty context line was restored to a valid context line.
 - Corrected both hunk counts and the missing context prefix. Re-ran a full parser over every 0097 hunk: all declared old/new counts and line prefixes now validate. Patch commit: fa815d28529498e1e04f6dfeb5ba57147338ca1a.
 - Push to xun should trigger a fresh XNU build. Do not dispatch Payload from #58; only use the next run if the log shows 0097 applied (not skipped), the source verification passes, and the kernel artifact SHA is recorded. The 0098 skip is a separate existing patch issue and is not evidence that 0097 applied.
+
+
+## 2026-11-11 XNU #60 verification failure and correction
+- Run `42999194797` (branch `xun`, commit `fa815d28529498e1e04f6dfeb5ba57147338ca1a`) compiled and linked `kernel.development.sweet`, but failed the mandatory post-build source verification. It is NOT a validated patched kernel; Payload auto-dispatch was skipped.
+- Full job log: `0097-sweet-gpu-ca-draw.patch` was skipped as malformed (`corrupt patch at line 606`); `0098-sweet-fb-copy-diagnostics.patch` was also skipped (`corrupt patch at line 69`). The verification gate then exited 1 because the expected 0097 source changes were absent. Artifact `xnu-kernel` was uploaded despite the failed gate; do not consume it as the fixed kernel.
+- Root cause in 0097: its final hunk declares `@@ -603,3 +603,4 @@` but the final empty line was encoded as context (` `), making the old/new hunk counts inconsistent. Changed only that final line prefix to `+`, representing the intended added blank line (3 old lines, 4 new lines).
+- 0098 remains a separate malformed diagnostics patch and has not been modified in this correction. Next XNU run must show 0097 applied without a skip warning, pass the source-tree gate, and only then dispatch Payload with the exact successful run ID.
