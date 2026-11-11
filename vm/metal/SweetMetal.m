@@ -1974,9 +1974,6 @@ static unsigned long sweet_texel_bpp(unsigned long fmt);
 
 @interface SweetTexture : SweetOpaque {
 	unsigned int tex_surface;
-	void *tex_ref;
-	unsigned int tex_seed;
-	unsigned int tex_owned;
 	unsigned long tex_width;
 	unsigned long tex_height;
 	unsigned long tex_format;
@@ -2003,8 +2000,6 @@ static unsigned long sweet_texel_bpp(unsigned long fmt);
 - (void *)pixelBytes;
 - (unsigned long)bytesPerRow;
 - (int)ensureRenderPixels;
-- (void)releaseRenderSurface;
-- (int)hasRenderSurface;
 - (void)markRendered;
 - (unsigned long)rendered;
 @end
@@ -2041,125 +2036,10 @@ sweet_readable_extent(const void *pointer, unsigned long want)
 	return got;
 }
 
-/* Create host-addressable backing for an internal render target. */
-static int
-sweet_texture_create_surface(unsigned long width, unsigned long height,
-    unsigned long requested_bpr, void **out_ref, unsigned int *out_seed,
-    unsigned int *out_id, unsigned char **out_base, unsigned long *out_bpr)
-{
-	typedef const void *CFT;
-	static void *cf;
-	static void *ios;
-	static CFT (*dict_new)(CFT, long, const void *, const void *);
-	static void (*dict_set)(CFT, CFT, CFT);
-	static CFT (*num_new)(CFT, long, const void *);
-	static CFT (*str_new)(CFT, const char *, unsigned);
-	static void (*cf_release)(CFT);
-	static CFT kcb, vcb;
-	static CFT (*surface_create)(CFT);
-	static unsigned int (*get_id)(CFT);
-	static void *(*get_base)(CFT);
-	static unsigned long (*get_bpr)(CFT);
-	static int (*lock)(CFT, unsigned int, unsigned int *);
-	static int (*unlock)(CFT, unsigned int, unsigned int *);
-	if (cf == 0) {
-		cf = dlopen("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", 2);
-		ios = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", 2);
-		if (cf == 0 || ios == 0) return 0;
-		dict_new = dlsym(cf, "CFDictionaryCreateMutable");
-		dict_set = dlsym(cf, "CFDictionarySetValue");
-		num_new = dlsym(cf, "CFNumberCreate");
-		str_new = dlsym(cf, "CFStringCreateWithCString");
-		cf_release = dlsym(cf, "CFRelease");
-		kcb = dlsym(cf, "kCFTypeDictionaryKeyCallBacks");
-		vcb = dlsym(cf, "kCFTypeDictionaryValueCallBacks");
-		surface_create = dlsym(ios, "IOSurfaceCreate");
-		get_id = dlsym(ios, "IOSurfaceGetID");
-		get_base = dlsym(ios, "IOSurfaceGetBaseAddress");
-		get_bpr = dlsym(ios, "IOSurfaceGetBytesPerRow");
-		lock = dlsym(ios, "IOSurfaceLock");
-		unlock = dlsym(ios, "IOSurfaceUnlock");
-		if (dict_new == 0 || dict_set == 0 || num_new == 0 ||
-		    str_new == 0 || cf_release == 0 || kcb == 0 || vcb == 0 ||
-		    surface_create == 0 || get_id == 0 || get_base == 0 ||
-		    get_bpr == 0 || lock == 0 || unlock == 0) return 0;
-	}
-	if (width == 0 || height == 0 || requested_bpr < width * 4 ||
-	    height > (~0UL / requested_bpr)) return 0;
-	CFT dict = dict_new(0, 8, kcb, vcb);
-	if (dict == 0) return 0;
-	struct { const char *key; int value; } props[] = {
-		{ "IOSurfaceWidth", (int)width },
-		{ "IOSurfaceHeight", (int)height },
-		{ "IOSurfaceBytesPerRow", (int)requested_bpr },
-		{ "IOSurfaceAllocSize", (int)(requested_bpr * height) },
-		{ "IOSurfacePixelFormat", 0x42475241 },
-	};
-	for (unsigned int i = 0; i < sizeof(props) / sizeof(props[0]); i++) {
-		CFT key = str_new(0, props[i].key, 0x08000100);
-		CFT value = num_new(0, 3, &props[i].value);
-		if (key != 0 && value != 0) dict_set(dict, key, value);
-		if (key != 0) cf_release(key);
-		if (value != 0) cf_release(value);
-	}
-	CFT ref = surface_create(dict);
-	cf_release(dict);
-	if (ref == 0) return 0;
-	unsigned int seed = 0;
-	if (lock(ref, 0, &seed) != 0) {
-		cf_release(ref);
-		return 0;
-	}
-	unsigned int id = get_id(ref);
-	unsigned char *base = (unsigned char *)get_base(ref);
-	unsigned long actual_bpr = get_bpr(ref);
-	if (id == 0 || base == 0 || actual_bpr < width * 4 ||
-	    height > (~0UL / actual_bpr)) {
-		unlock(ref, 0, &seed);
-		cf_release(ref);
-		return 0;
-	}
-	*out_ref = (void *)ref;
-	*out_seed = seed;
-	*out_id = id;
-	*out_base = base;
-	*out_bpr = actual_bpr;
-	return 1;
-}
-
 @implementation SweetTexture
-
-- (int)hasRenderSurface
-{
-	return tex_ref != 0;
-}
-
-- (void)releaseRenderSurface
-{
-	if (tex_ref != 0) {
-		void *ios = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", 2);
-		if (ios != 0) {
-			int (*unlock)(const void *, unsigned int, unsigned int *) =
-			    dlsym(ios, "IOSurfaceUnlock");
-			if (unlock != 0) unlock(tex_ref, 0, &tex_seed);
-		}
-		void *cf = dlopen("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", 2);
-		if (cf != 0) {
-			void (*release)(const void *) = dlsym(cf, "CFRelease");
-			if (release != 0) release(tex_ref);
-		}
-	}
-	tex_ref = 0;
-	tex_seed = 0;
-	if (tex_owned) tex_surface = 0;
-	tex_owned = 0;
-	tex_pixels = 0;
-	tex_bpr = 0;
-}
 
 - (void)setSurfaceID:(unsigned int)identifier
 {
-	if (tex_owned && identifier != tex_surface) [self releaseRenderSurface];
 	tex_surface = identifier;
 }
 
@@ -2170,9 +2050,6 @@ sweet_texture_create_surface(unsigned long width, unsigned long height,
 
 - (void)setSize:(unsigned long)width height:(unsigned long)height
 {
-	if (tex_owned && (width != tex_width || height != tex_height)) {
-		[self releaseRenderSurface];
-	}
 	tex_width = width;
 	tex_height = height;
 }
@@ -2204,9 +2081,7 @@ sweet_texture_create_surface(unsigned long width, unsigned long height,
 	if (bytes == 0 || need == 0) {
 		return;
 	}
-	if (tex_ref != 0) {
-		[self releaseRenderSurface];
-	} else if (tex_pixels != 0) {
+	if (tex_pixels != 0) {
 		free(tex_pixels);
 		tex_pixels = 0;
 	}
@@ -2303,7 +2178,6 @@ sweet_texture_create_surface(unsigned long width, unsigned long height,
 - (void)markRendered
 {
 	tex_rendered = 1;
-	tex_version++;
 }
 
 - (unsigned long)rendered
@@ -2314,63 +2188,31 @@ sweet_texture_create_surface(unsigned long width, unsigned long height,
 - (int)ensureRenderPixels
 {
 	if (tex_width == 0 || tex_height == 0 || tex_width > 8192 ||
-	    tex_height > 8192 || tex_width > (~0UL / 4)) {
+	    tex_height > 8192) {
 		return -1;
 	}
-	unsigned long bpr = (tex_width * 4 + 63) & ~63UL;
-	if (tex_pixels != 0 && tex_bpr >= tex_width * 4 &&
-	    (tex_ref != 0 || tex_surface == 0)) {
+	unsigned long bpr = tex_width * [self bytesPerPixel];
+	if (tex_pixels != 0 && tex_bpr == bpr) {
 		return 0;
 	}
-	if (tex_ref != 0) {
-		[self releaseRenderSurface];
-	} else if (tex_pixels != 0) {
-		free(tex_pixels);
-		tex_pixels = 0;
+	free(tex_pixels);
+	tex_pixels = calloc(bpr * tex_height, 1);
+	if (tex_pixels == 0) {
+		tex_bpr = 0;
+		return -1;
 	}
-	void *ref = 0;
-	unsigned int seed = 0, identifier = 0;
-	unsigned char *base = 0;
-	unsigned long actual_bpr = 0;
-	if (sweet_texture_create_surface(tex_width, tex_height, bpr, &ref,
-	    &seed, &identifier, &base, &actual_bpr)) {
-		tex_ref = ref;
-		tex_seed = seed;
-		tex_surface = identifier;
-		tex_owned = 1;
-		tex_pixels = base;
-		tex_bpr = actual_bpr;
-	} else {
-		/* Keep the local raster fallback if the wired IOSurface budget is
-		 * exhausted; never advertise heap memory as host-mappable. */
-		if (tex_height > (~0UL / bpr)) return -1;
-		tex_pixels = calloc(bpr * tex_height, 1);
-		if (tex_pixels == 0) {
-			tex_bpr = 0;
-			return -1;
-		}
-		tex_surface = 0;
-		tex_owned = 0;
-		tex_bpr = bpr;
-		dprintf(console_fd,
-		    "SWEETMETAL: offscreen IOSurface unavailable; local fallback %lux%lu bpr=%lu%c",
-		    tex_width, tex_height, tex_bpr, 10);
-	}
+	tex_bpr = bpr;
 	tex_dirty = 1;
 	dprintf(console_fd,
-	    "SWEETMETAL: offscreen IOSurface=%u %lux%lu bpr=%lu base=%p%c",
-	    tex_surface, tex_width, tex_height, tex_bpr, tex_pixels, 10);
+	    "SWEETMETAL: offscreen storage %lux%lu fmt=%lu bpr=%lu %p%c",
+	    tex_width, tex_height, tex_format, tex_bpr, tex_pixels, 10);
 	return 0;
 }
 
 - (void)dealloc
 {
-	if (tex_ref != 0) {
-		[self releaseRenderSurface];
-	} else {
-		free(tex_pixels);
-		tex_pixels = 0;
-	}
+	free(tex_pixels);
+	tex_pixels = 0;
 	[super dealloc];
 }
 
@@ -2428,7 +2270,6 @@ typedef struct {
 	const unsigned char *tex;
 	unsigned long tex_w, tex_h, tex_fmt_px, tex_bpr;
 	unsigned int tex_surface;
-	unsigned int tex_generation;
 	unsigned long tex_internal;
 	int tex_mapped;
 	id tex_owner;
@@ -2850,7 +2691,6 @@ sweet_ca_batch(const SweetRaster *r, unsigned int dst_id,
 		header.tri_count = (unsigned int)(last - first);
 		header.chunk_index = (unsigned int)chunk;
 		header.chunk_count = (unsigned int)chunks;
-		header.reserved = r->tex_generation;
 		memcpy(message, &header, sizeof(header));
 		unsigned char *out = message + sizeof(header);
 		for (unsigned long t = first; t < last; t++) {
@@ -2980,9 +2820,7 @@ typedef struct {
 		return;
 	}
 	if (((unsigned int (*)(id, SEL))objc_msgSend)(texture,
-	    sel_registerName("surfaceID")) != 0 &&
-	    ((int (*)(id, SEL))objc_msgSend)(texture,
-	    sel_registerName("hasRenderSurface")) == 0) {
+	    sel_registerName("surfaceID")) != 0) {
 		return;
 	}
 	if (((int (*)(id, SEL))objc_msgSend)(texture,
@@ -2997,9 +2835,9 @@ typedef struct {
 	    sel_registerName("height"));
 	enc_map.bytes_per_row = ((unsigned long (*)(id, SEL))objc_msgSend)(
 	    texture, sel_registerName("bytesPerRow"));
-	if (enc_map.bytes_per_row < enc_map.width * 4) {
+	if (enc_map.bytes_per_row != enc_map.width * 4) {
 		dprintf(console_fd,
-		    "SWEETMETAL: skip offscreen %lux%lu bpr=%lu (invalid stride)%c",
+		    "SWEETMETAL: skip offscreen %lux%lu bpr=%lu (not 8-bit)%c",
 		    enc_map.width, enc_map.height, enc_map.bytes_per_row, 10);
 		enc_map.base = 0;
 		enc_map.width = 0;
@@ -3359,11 +3197,6 @@ sweet_texture_surface(id texture)
 				r.tex_internal = ((unsigned long (*)(id, SEL))objc_msgSend)(
 				    enc_tex[i], sel_registerName("rendered")) != 0;
 			}
-			if (r.tex_internal && ((BOOL (*)(id, SEL, Class))objc_msgSend)(
-			    enc_tex[i], sel_registerName("isKindOfClass:"),
-			    objc_getClass("SweetTexture"))) {
-				r.tex_generation = (unsigned int)((SweetTexture *)enc_tex[i])->tex_version;
-			}
 			if (src_mapped) {
 				if (r.tex_w == 0) r.tex_w = src_map.width;
 				if (r.tex_h == 0) r.tex_h = src_map.height;
@@ -3382,11 +3215,14 @@ sweet_texture_surface(id texture)
 		    (int)r.dst_h;
 		/*
 		 * Hand the batch to the host when it can address both surfaces.
-		 * Internal offscreen render targets now use IOSurface backing, so
-		 * the host can map their physical pages instead of uploading heap
-		 * pixels through thousands of small IPC messages.
-		 * Full-size drawable destinations still use the private staging
-		 * surface; the host must never write a CA-owned drawable directly.
+		 * Uploaded pixel buffers travel once per version; a texture this
+		 * process rendered offscreen stays local because its contents
+		 * change every frame and live in heap memory.
+		 *
+		 * Full-size (drawable) destinations are redirected to this
+		 * process's own staging surface; the host must never write a CA
+		 * surface (see sweet_stage_ensure). Smaller destinations stay on
+		 * the local rasterizer.
 		 */
 		unsigned int host_surface = enc_surface;
 		if (enc_surface != 0 && r.dst_w >= 1000 && r.dst_h >= 2000 &&
@@ -3431,16 +3267,28 @@ sweet_texture_surface(id texture)
 					}
 				}
 			} else if (r.tex_owner != 0 && r.tex_internal &&
-			    r.tex_surface != 0 && r.tex_w > 0 && r.tex_h > 0 &&
-			    r.tex_bpr >= r.tex_w * 4) {
-				/* Map the render target's IOSurface directly. Its actual
-				 * IOSurface stride is carried in tex_bpr; no size cap and
-				 * no guest-to-host pixel upload are needed. */
-				if (!sweet_ca_map(r.tex_surface)) {
+			    r.tex_w > 0 && r.tex_h > 0 && r.tex_bpr >= r.tex_w * 4 &&
+			    r.tex_bpr * r.tex_h <= (1u << 20)) {
+				/*
+				 * Offscreen render targets live in this process's heap,
+				 * where the host cannot address them, so their whole
+				 * screen-sized composite used to stay on the TCG
+				 * rasterizer (~1.1 s per draw). The local rasterizer
+				 * writes those pixels as RGBA8; sending them costs
+				 * ~175 KB for the 143x307 wallpaper chain, which is far
+				 * cheaper than sampling them under TCG. There is no
+				 * version counter for renders, so upload every use.
+				 */
+				SweetTexture *texture = (SweetTexture *)r.tex_owner;
+				if (texture->tex_host_id == 0) {
+					texture->tex_host_id = sweet_ca_upload_ids++;
+				}
+				tex_id = texture->tex_host_id;
+				tex_flags = SWEET_CA_F_TEXTURED | SWEET_CA_F_UPLOAD_TEX;
+				if (!sweet_ca_upload(tex_id, (unsigned int)r.tex_fmt_px,
+				    r.tex_w, r.tex_h, r.tex_bpr, r.tex,
+				    r.tex_bpr * r.tex_h, tex_flags)) {
 					host_ok = 0;
-				} else {
-					tex_id = r.tex_surface;
-					tex_flags = SWEET_CA_F_TEXTURED | SWEET_CA_F_INTERNAL;
 				}
 			} else {
 				host_ok = 0;
