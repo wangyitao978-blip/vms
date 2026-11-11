@@ -53,3 +53,10 @@ No source code has yet been ported in this branch. Record actual commits and run
 ## 2026-11-11 payload build-source correction
 - Confirmed `.github/workflows/build-vmios-full-gpu-payload.yml` checks out the `payload` branch and runs `tools/build-sweetmetal.sh`; the APK workflow does not reference/build `vm/metal/SweetMetal.m`. Therefore the effective IOSurface threshold/log-throttle change is also committed to `payload`, alongside the `CaCompositor.java` cache hotfix. The equivalent change on `apk` is only a source mirror and is not evidence that an APK contains the Metal plugin change.
 - Payload source commit: 2481d12256fd61c2c078106901b9f0f4708a93d3. Payload FIX update follows. The payload workflow remains dispatch-only; no build was started by these source pushes.
+
+
+## 2026-11-11 Payload provenance hardening and automatic XNU handoff
+- Payload workflow validates that the supplied XNU run is completed/successful, originates from branch xun, and uses .github/workflows/xnu.yml before downloading xnu-kernel.
+- Each Payload artifact includes XNU-PROVENANCE.txt with XNU run ID, source commit, and kernel SHA-256; SHA256SUMS contains the kernel hash and the Actions job summary reports the same provenance.
+- Normal builds are dispatched automatically by the XNU workflow after the verified kernel artifact is uploaded. Manual dispatch remains a recovery path and still requires an explicit run ID.
+- The malformed 0097 patch and XNU source-tree verification gate are recorded on xun/FIX.md; this branch change only hardens provenance and packaging.
