@@ -1,22 +1,25 @@
 # vmios working notes
 
-### >>> ACTIVE: 分支构建/未合并修改审计（2026-11-11 05:16 +08:00）<<<
+### >>> ACTIVE: 未合并修复已选择性移植，构建核验中（2026-11-11 09:52 +08:00）<<<
 
-- 本轮用户要求：检查曾构建 APK、payload、XNU 的其他分支，找出未进入当前 `apk`、`payload`、`xun` 的修改；不用 Work、不反复确认。
-- 审计时目标 HEAD：`apk=9c98d495653f`；`payload=ca7e2fc8dc3d`；`xun=ae8ab927a7c5`。
-- 最新构建状态：
-  - APK Run [42900552648](https://github.com/wangyitao978-blip/vms/actions/runs/42900552648)：成功，branch apk，SHA 9c98d495653f。
-  - Payload Run [42900356120](https://github.com/wangyitao978-blip/vms/actions/runs/42900356120)：成功，branch payload，SHA 4044d46a89ae；host-raster 和 guest-local-raster artifacts 均存在。
-  - XNU Run [42900388186](https://github.com/wangyitao978-blip/vms/actions/runs/42900388186)：成功，branch xun，SHA be6516ea6a4b；xnu-kernel 和 xnu-buildtree artifacts 均存在。当前 xun HEAD 比它多两条 workflow 记录提交，没有代码变化。不是仍在构建。
-- 已确认的遗漏/候选：
-  1. `fix/mobilegestalt-boot-and-side-controls` 相对 apk/payload 各有 7 个独有提交，净文件差异为 FIX.md、vm/metal/SweetMetal.m、xnu/patches/0097-sweet-gpu-ca-draw.patch。当前 apk/payload 的 fmt550 probe 仍是未检查 mapped extent/stride 的旧版；side branch 已有 mapped-only、64x64 stride/可读范围校验探针。该文件由 payload workflow 编译，不属于 APK workflow 的构建输入。
-  2. 同一 side branch 相对 xun 有 90 ahead / 32 behind，禁止整支合并。XNU patch 的独有部分是 surface allocation failure / map null-memory 诊断日志；xun 已有 map 返回真实 IOReturn。日志不是修复，仍没有保证 s->memory 非空的代码改动。
-  3. `fix/boot-speed-snapshot-persistence` 相对 apk/payload 各 39 个独有提交，且目标分支有 87/88 个反向独有提交。候选包含 QEMU asset fingerprint/snapshot persistence、冷启动分段计时、默认关闭 3 GiB prealloc、Framebuffer 1:1/触摸映射；其中强制 cpus=2 与当前 4 vCPU 配置冲突，不可整支合并。
-  4. `fix/offscreen-iosurface-textures` 曾成功构建 APK/payload，但与当前目标分支大量分叉（43 ahead、87/88 behind）；当前 payload 已存在 IOSurface render-target 创建/映射/ownership 相关实现，不能把旧分支整体回灌。
-  5. `fix/system-ui-red-blue-channel` 对 apk/payload 均 ahead_by=0，已全部包含。
-  6. `main` 相对目标分支未发现应回灌的代码修改，主要是记录/日志/截图差异。
-- 本轮没有改代码、合并、cherry-pick、改分支名、触发新构建或取消构建。审计记录已追加到 `fix/操作记录.md`（commit `8720a6acaf115e4bca31e10f6f666ee2e1d1197f`，main）。
-- 下一步若继续：逐项检查 boot-speed 候选和 fmt550 探针；XNU 的 s->memory == NULL 根因仍需真正修复，不可把诊断日志称作修复。
+- 用户要求：把前次分支审计发现的未合并修复移植到当前 `apk`、`xun`、`payload`；直接操作，不使用 Work，不反复确认。
+- APK 分支修改：
+  - `EngineAssets.java` commit `91abe57743d8`：以 QEMU 资产 SHA256 指纹判断引擎版本，防止 APK UI 更新导致 snapshot 无谓失效；无 manifest 时回退旧逻辑。
+  - `.github/workflows/build-apk.yml` commit `7498b79f3681`：生成、校验并确认 APK 内含 `vmios-engine-version`。
+  - `VmEngine.java` commit `a9cb82643b0a`：增加 boot stage 日志（payload/RAM/engine/QEMU/PSCI/首帧）；3 GiB RAM prealloc 变为仅 bootargs 含 `sweet_prealloc=1` 时启用。保留现有真 4 vCPU 配置和 taskset `fc`，没有移植旧分支 cpus=2 强制逻辑。
+  - 未移植旧分支 FramebufferView 1:1 显示/触摸映射及 MainActivity 移除 UI 控件，避免擅改显示交互。
+- Payload 分支修改：
+  - `vm/metal/SweetMetal.m` commit `f1e1788ab006`：fmt550 一次性取证 probe 要求 mapped、64x64、stride 合法、完整 readable extent，按真实 stride 逐行统计；解码/采样函数行为未改。
+  - 原 payload workflow 只有 workflow_dispatch，暂未自动触发；需等本次 XNU build 成功后添加 payload push 触发并绑定该 XNU Run ID。
+- XNU 分支修改：
+  - `xnu/patches/0097-sweet-gpu-ca-draw.patch` commit `890fc4b022f3`：map selector 对 memory-null/allocSize-zero 输出日志；外层返回真实 IOReturn；增加内存分配失败时 wired/limit 日志。
+  - 修正之前审计误判：移植前 xun 的 map selector 仍无条件返回 success；本次已改为真实 result。
+  - 这些改动是错误传播+诊断，不是分配根因修复，`s->memory == NULL` 仍待进一步定位。
+- 触发策略：APK 的 push workflow 已可在 apk 分支触发；XNU patch push 已可在 xun 分支触发。Payload workflow 需后续调整以便自动构建。
+- 记录：`fix/操作记录.md` 已追加本轮详细记录，commit `d55fd44d378e51e384bd40e1dabc874e8303d0fe`。本轮代码提交分别在三个目标分支，未重命名/删除分支，未整支 merge。
+- 设备端验证尚未执行；不能将 CI 成功等同于真机修复成功。
+- 下一步：检查 APK/XNU Actions；XNU 成功后调整 payload workflow 并触发 payload，确保使用本次新 kernel artifact。
+
 
 ---
 
