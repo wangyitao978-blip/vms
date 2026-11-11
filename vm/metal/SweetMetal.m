@@ -2208,7 +2208,7 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 	    dlsym(ios, "IOSurfaceUnlock");
 	void (*release_surface)(SweetCFType) = dlsym(ios, "IOSurfaceRelease");
 	if (surface_create == 0 || get_id == 0 || get_base == 0 ||
-	    get_bpr == 0 || lock == 0 || unlock == 0 || release_surface == 0) {
+	    get_bpr == 0 || lock == 0 || unlock == 0) {
 		return sweet_render_surface_fail("IOSurface symbols", width, height,
 		    0, -1);
 	}
@@ -2253,7 +2253,8 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 	unsigned int seed = 0;
 	int lock_result = lock(ref, 0, &seed);
 	if (lock_result != 0) {
-		release_surface(ref);
+		if (release_surface != 0) release_surface(ref);
+		else cf_release(ref);
 		return sweet_render_surface_fail("IOSurfaceLock", width, height,
 		    requested_bpr, lock_result);
 	}
@@ -2262,7 +2263,8 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 	unsigned long bpr = get_bpr(ref);
 	if (identifier == 0 || base == 0 || bpr < width * 4) {
 		unlock(ref, 0, &seed);
-		release_surface(ref);
+		if (release_surface != 0) release_surface(ref);
+		else cf_release(ref);
 		const char *reason = identifier == 0 ? "IOSurfaceGetID" :
 		    (base == 0 ? "IOSurfaceGetBaseAddress" : "bytes-per-row validation");
 		return sweet_render_surface_fail(reason, width, height, bpr, -1);
