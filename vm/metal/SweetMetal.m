@@ -2175,12 +2175,12 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 		return sweet_render_surface_fail("IOSurface symbols", width, height,
 		    0, -1);
 	}
+	unsigned long requested_bpr = (width * 4 + 63) & ~63UL;
 	SweetCFType dict = dict_new(0, 8, kcb, vcb);
 	if (dict == 0) {
 		return sweet_render_surface_fail("CFDictionaryCreateMutable", width,
 		    height, requested_bpr, -1);
 	}
-	unsigned long requested_bpr = (width * 4 + 63) & ~63UL;
 	struct { const char *key; int value; } props[] = {
 		{ "IOSurfaceWidth", (int)width },
 		{ "IOSurfaceHeight", (int)height },
