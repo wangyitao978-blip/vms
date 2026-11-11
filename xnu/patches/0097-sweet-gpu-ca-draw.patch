@@ -320,7 +320,7 @@ index 7f90c56..6c448ff 100644
 +static volatile SInt32 sweet_surface_alive_surfaces;
  static uint32_t      sweet_surface_wired_logs;
  #define SWEET_SURFACE_WIRED_MAX         (1536ull << 20)
-
+ 
  OSDefineMetaClassAndStructors(SweetSurface, OSObject);
 @@ -80,6 +82,17 @@ SweetSurface::free()
  {
