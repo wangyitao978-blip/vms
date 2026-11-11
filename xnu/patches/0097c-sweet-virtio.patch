@@ -1,0 +1,130 @@
+diff --git a/iokit/Kernel/arm/SweetVirtioConsole.cpp b/iokit/Kernel/arm/SweetVirtioConsole.cpp
+index 5488156..9f5d84d 100644
+--- a/iokit/Kernel/arm/SweetVirtioConsole.cpp
++++ b/iokit/Kernel/arm/SweetVirtioConsole.cpp
+@@ -108,6 +108,7 @@ class SweetVirtioConsole : public IOService {
+ 	bool configure();
+ 	void post(unsigned id, unsigned bytes);
+ 	IOReturn complete(unsigned id, unsigned *length);
++	IOReturn completeWithin(unsigned id, unsigned *length, unsigned ms);
+ 	void cleanup();
+ 
+ public:
+@@ -117,6 +118,7 @@ public:
+ 	void free() APPLE_KEXT_OVERRIDE;
+ 
+ 	IOReturn send(const void *data, size_t bytes);
++	IOReturn sendWait(const void *data, size_t bytes, uint32_t sequence);
+ 	IOReturn receive(void *data, size_t *bytes);
+ };
+ 
+@@ -137,6 +139,18 @@ sweet_gpu_wire_send(const void *data, size_t bytes)
+ 	return console->send(data, bytes);
+ }
+ 
++/* Draw batches must be finished on the host before the guest touches the
++ * surfaces again, so wait for the matching acknowledgement. */
++extern "C" IOReturn
++sweet_gpu_wire_send_wait(const void *data, size_t bytes, uint32_t sequence)
++{
++	SweetVirtioConsole *console = sweet_wire_console;
++	if (console == nullptr) {
++		return kIOReturnOffline;
++	}
++	return console->sendWait(data, bytes, sequence);
++}
++
+ IOService *
+ SweetVirtioConsole::probe(IOService *provider, SInt32 *score)
+ {
+@@ -258,6 +272,12 @@ SweetVirtioConsole::post(unsigned id, unsigned bytes)
+ 
+ IOReturn
+ SweetVirtioConsole::complete(unsigned id, unsigned *length)
++{
++	return completeWithin(id, length, 2000);
++}
++
++IOReturn
++SweetVirtioConsole::completeWithin(unsigned id, unsigned *length, unsigned ms)
+ {
+ 	Queue &q = queues[id];
+ 	if (!q.pending) {
+@@ -265,7 +285,7 @@ SweetVirtioConsole::complete(unsigned id, unsigned *length)
+ 	}
+ 	volatile uint16_t *used = reinterpret_cast<volatile uint16_t *>(q.memory() + 256);
+ 	uint64_t deadline;
+-	clock_interval_to_deadline(2000, kMillisecondScale, &deadline);
++	clock_interval_to_deadline(ms, kMillisecondScale, &deadline);
+ 	while (used[1] == q.used) {
+ 		if (read32(0x70) & (64 | 128)) {
+ 			online = false;
+@@ -325,8 +345,68 @@ SweetVirtioConsole::send(const void *data, size_t bytes)
+ 	return status;
+ }
+ 
++/* The host answers every draw batch with {wire magic, sequence}. */
++IOReturn
++SweetVirtioConsole::sendWait(const void *data, size_t bytes, uint32_t sequence)
++{
++	struct { uint32_t magic; uint32_t sequence; } ack;
++	if (data == nullptr || bytes == 0 || bytes > kBufferSize) {
++		return kIOReturnBadArgument;
++	}
++	IOLockLock(gate);
++	IOReturn status = kIOReturnNotReady;
++	Queue &q = queues[1];
++	Queue &in = queues[0];
++	if (online) {
++		unsigned consumed = 0;
++		if (q.pending) {
++			status = complete(1, &consumed);
++		} else {
++			status = kIOReturnSuccess;
++		}
++		/* Drop a late acknowledgement from an earlier batch. */
++		if (status == kIOReturnSuccess && in.pending) {
++			unsigned dropped = 0;
++			completeWithin(0, &dropped, 0);
++		}
++		/* Give the host a receive buffer before it can answer. */
++		if (status == kIOReturnSuccess && !in.pending) {
++			post(0, kBufferSize);
++		}
++		if (status == kIOReturnSuccess) {
++			memcpy(q.data(), data, bytes);
++			post(1, (unsigned)bytes);
++			status = complete(1, &consumed);
++		}
++		if (status == kIOReturnSuccess) {
++			status = kIOReturnNotResponding;
++			for (unsigned tries = 0; tries < 4; tries++) {
++				unsigned got = 0;
++				/* Host CA rasterization is CPU-bound today; a 250 ms wait
+                 * expires before a full frame's draw batches finish. */
+                IOReturn reply = completeWithin(0, &got, 5000);
++				if (reply != kIOReturnSuccess) {
++					break;
++				}
++				if (got >= sizeof(ack)) {
++					memcpy(&ack, in.data(), sizeof(ack));
++					if (ack.magic == kGpuWireMagic &&
++					    ack.sequence == sequence) {
++						status = kIOReturnSuccess;
++						break;
++					}
++				}
++				post(0, kBufferSize);
++			}
++			if (!in.pending) {
++				post(0, kBufferSize);
++			}
++		}
++	}
++	IOLockUnlock(gate);
++	return status;
++}
++
+ IOReturn
+ SweetVirtioConsole::receive(void *data, size_t *bytes)
+ {
