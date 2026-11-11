@@ -533,9 +533,11 @@ public final class MainActivity extends Activity {
         }
         if (immersiveUi) {
             screen.setOnClickListener(v -> toggleImmersiveUi(false));
-            if (fbView != null) fbView.setOnClickListener(v -> setImmersive(false));
+            if (displayArea != null) displayArea.setOnClickListener(v -> toggleImmersiveUi(false));
+            if (fbView != null) fbView.setOnClickListener(v -> toggleImmersiveUi(false));
         } else {
             screen.setOnClickListener(null);
+            if (displayArea != null) displayArea.setOnClickListener(null);
             if (fbView != null) fbView.setOnClickListener(null);
         }
     }
