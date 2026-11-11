@@ -55,7 +55,7 @@ VMs 将以下部分组合成一套虚拟设备：
 
 Android 应用显示名称为 **VMs**。APK、Host Raster payload 和 XNU 内核分别由不同 GitHub Actions 工作流构建，不能把其中一个构建成功误认为另外两个也已完成。
 
-**当前仓库状态说明（2026-11-12）：** APK 工作流尚未加入 Host Raster payload 的自动注入步骤，APK 也尚未包含 `BootAssets` 自动释放实现。因此目前不能宣称安装 APK 后就会自动释放内置 payload；请以最新 APK 构建说明和实际 artifact 内容为准。计划内置时只选择 **Host Raster payload**，不选择 Guest Local payload。XNU 沿用已验证的既有构建，不因 APK 图标或文档修改而重新构建。
+**当前内置方案（2026-11-12）：** APK CI 从成功的 Payload 工作流产物中只下载并注入 **Host Raster payload**，不下载、不打包 Guest Local。首次启动时，应用会在后台将 payload 释放到私有目录 `files/vm/`，并校验 SHA-256；用户仍需自行准备 iOS 根镜像。APK 构建必须通过内置资源路径和哈希校验后才会上传。设备首次启动后的释放结果仍需通过 `run-as` 检查确认。XNU 沿用既有构建，不因 APK 内置 payload 而重新构建。
 
 ## 仓库结构
 
