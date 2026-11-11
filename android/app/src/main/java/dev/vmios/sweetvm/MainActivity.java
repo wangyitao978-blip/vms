@@ -431,7 +431,7 @@ public final class MainActivity extends Activity {
         bottom.addView(modeShrink, new LinearLayout.LayoutParams(U()*3, U()));
         modeFull = bottomButton("全屏", "等比铺满", !running, () -> setDisplayMode(2));
         bottom.addView(modeFull, new LinearLayout.LayoutParams(U()*3, U()));
-        immersiveButton = bottomButton("◉", "沉浸", true, () -> setImmersive(true));
+        immersiveButton = bottomButton("◉", "沉浸", true, () -> toggleImmersiveUi(true));
         bottom.addView(immersiveButton, new LinearLayout.LayoutParams(U(), U()));
         FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(
                 U()*11, U(), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
@@ -1002,16 +1002,6 @@ public final class MainActivity extends Activity {
                 });
             }
         }, "sweetvm-start").start();
-    }
-
-    private TextView placeholderControl(String glyph, String description, int sizeSp) {
-        TextView control = text(glyph, sizeSp, TEXT, true);
-        control.setGravity(Gravity.CENTER);
-        control.setBackground(outline(SURFACE_2, STROKE, 10, 1));
-        control.setContentDescription(description);
-        control.setClickable(false);
-        control.setFocusable(false);
-        return control;
     }
 
     private void showVmScreen() {
