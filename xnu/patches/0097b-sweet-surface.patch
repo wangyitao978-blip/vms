@@ -1,0 +1,43 @@
+diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.cpp
+index 7f90c56..6c448ff 100644
+--- a/iokit/Kernel/arm/SweetSurface.cpp
++++ b/iokit/Kernel/arm/SweetSurface.cpp
+@@ -73,6 +73,7 @@ static uint32_t      sweet_surface_users[SWEET_SURFACE_MAX_ID];
+ static uint32_t      sweet_surface_next_id = 1;
+ static uint32_t      sweet_surface_creates_logged;
+ static uint64_t      sweet_surface_wired;       /* bytes of buffer surfaces */
++static uint32_t      sweet_surface_wired_logs;
+ #define SWEET_SURFACE_WIRED_MAX         (1536ull << 20)
+ 
+ OSDefineMetaClassAndStructors(SweetSurface, OSObject);
+@@ -686,10 +687,29 @@ IOSurfaceRootUserClient::create(IOExternalMethodArguments *args)
+ 	ret = sweet_surface_layout(s, props);
+ 	if (ret == kIOReturnSuccess) {
+ 		IOBufferMemoryDescriptor *mem = NULL;
++		int contiguous = 0;
+ 		if ((uint64_t)OSAddAtomic64(s->allocSize, (volatile SInt64 *)&sweet_surface_wired) +
+ 		    s->allocSize <= SWEET_SURFACE_WIRED_MAX) {
++			/* The host compositor addresses surfaces by physical address, so
++			 * prefer one linear run; fall back to ordinary wired pages when
++			 * the allocator cannot supply one. */
+ 			mem = IOBufferMemoryDescriptor::inTaskWithOptions(kernel_task,
+-			    kIODirectionInOut | kIOMemoryKernelUserShared, s->allocSize, page_size);
++			    kIODirectionInOut | kIOMemoryKernelUserShared |
++			    kIOMemoryPhysicallyContiguous, s->allocSize, page_size);
++			contiguous = mem != NULL;
++			if (mem == NULL) {
++				mem = IOBufferMemoryDescriptor::inTaskWithOptions(kernel_task,
++				    kIODirectionInOut | kIOMemoryKernelUserShared,
++				    s->allocSize, page_size);
++			}
++		}
++		if (mem != NULL && sweet_surface_wired_logs < 64) {
++			IOByteCount span = 0;
++			addr64_t pa = mem->getPhysicalSegment(0, &span, 0);
++			sweet_surface_wired_logs++;
++			IOLog("SWEET SURF: memory %u bytes contiguous=%d pa 0x%llx span 0x%llx\n",
++			    s->allocSize, contiguous, (unsigned long long)pa,
++			    (unsigned long long)span);
+ 		}
+ 		if (mem == NULL) {
+ 			OSAddAtomic64(-(SInt64)s->allocSize, (volatile SInt64 *)&sweet_surface_wired);
