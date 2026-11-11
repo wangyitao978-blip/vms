@@ -48,3 +48,5 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Added a post-build source-tree gate requiring SWEET SURF: memory in SweetSurface.cpp and kSweetGPUSurfaceMap in SweetGPU.cpp; builds that skip 0097 now fail.
 - Added automatic Payload dispatch after a successful xun build, passing that exact GITHUB_RUN_ID. Normal XNU-to-Payload builds no longer require manual run-ID entry. Added actions: write permission.
 - Runtime validation remains pending. Do not change lock timeout parameters or unrelated rendering paths in this repair.
+
+- Follow-up correction: fixed the XNU workflow GH_TOKEN expression so the automatic workflow_dispatch call receives github.token (commit fb9da4f37dc3feb58dbd3928b49406e9fac252b8).
