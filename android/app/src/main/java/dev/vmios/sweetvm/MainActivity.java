@@ -83,6 +83,19 @@ public final class MainActivity extends Activity {
     private long lastFrames;
     private long lastFrameTime;
     private boolean controlsVisible = true;
+    private int displayMode = 1; // 0=1:1, 1=shrink, 2=fullscreen
+    private boolean immersiveUi;
+    private TextView hostClock;
+    private TextView hostCpu;
+    private TextView hostRam;
+    private TextView startButton;
+    private TextView modeOne;
+    private TextView modeShrink;
+    private TextView modeFull;
+    private TextView immersiveButton;
+    private FrameLayout displayArea;
+    private long previousHostTotal = -1;
+    private long previousHostIdle = -1;
 
     private final Runnable hideControls = () -> {
         if (!vmActive || vmTop == null) {
@@ -328,123 +341,262 @@ public final class MainActivity extends Activity {
         vmActive = false;
         ui.removeCallbacks(ticker);
         ui.removeCallbacks(hideControls);
+        ui.removeCallbacks(hostStatsTicker);
         if (touch != null) {
             touch.close();
             touch = null;
         }
         releaseWake();
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        immersiveUi = false;
+        displayMode = 1;
+        showMainScreen(false);
+    }
+
+    private int U() { return dp(36); }
+
+    private void showMainScreen(boolean running) {
         setVmSystemBars(false);
         clearRoot();
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setClipToPadding(false);
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setPadding(dp(20), statusBarHeight() + dp(14), dp(20), navBarHeight() + dp(24));
-        scroll.addView(c, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        rootView.addView(scroll, new FrameLayout.LayoutParams(
+        rootView.setBackgroundColor(Color.BLACK);
+        FrameLayout screen = new FrameLayout(this);
+        screen.setBackgroundColor(Color.BLACK);
+        rootView.addView(screen, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        LinearLayout head = new LinearLayout(this);
-        head.setOrientation(LinearLayout.HORIZONTAL);
-        head.setGravity(Gravity.CENTER_VERTICAL);
-        TextView logo = text("S", 26, Color.WHITE, true);
-        logo.setGravity(Gravity.CENTER);
-        logo.setBackground(round(ACCENT, 17));
-        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(dp(54), dp(54));
-        logoLp.rightMargin = dp(14);
-        head.addView(logo, logoLp);
-        LinearLayout titles = new LinearLayout(this);
-        titles.setOrientation(LinearLayout.VERTICAL);
-        titles.addView(text("vmios", 29, TEXT, true));
-        TextView sub = text("iOS 16 · XNU 虚拟机", 13, DIM, false);
-        sub.setPadding(0, dp(2), 0, 0);
-        titles.addView(sub);
-        head.addView(titles);
-        c.addView(head);
-        c.addView(gap(22));
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT);
+        top.setPadding(dp(8), 0, dp(8), 0);
+        top.setBackgroundColor(0xFF111111);
+        hostClock = text("⏱ 00:00:00", 12, TEXT, true);
+        hostCpu = text("CPU --%", 12, TEXT, true);
+        hostRam = text("RAM --/-- GB", 12, TEXT, true);
+        top.addView(hostClock, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        addMetricGap(top);
+        top.addView(hostCpu, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        addMetricGap(top);
+        top.addView(hostRam, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        top.setOnClickListener(v -> showAdvanced());
+        top.setOnLongClickListener(v -> { showLogs(); return true; });
+        FrameLayout.LayoutParams topLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, U(), Gravity.TOP);
+        topLp.leftMargin = dp(4); topLp.rightMargin = dp(4);
+        screen.addView(top, topLp);
+        vmTimer = hostClock;
+        vmCpu = hostCpu;
 
-        File root = cfg.rootFile();
-        File payload = cfg.payloadFile();
-        boolean ready = root != null && root.isFile() && payload != null && payload.isFile();
-        LinearLayout status = card();
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        TextView dot = text("●", 13, ready ? GOOD : WARN, false);
-        row.addView(dot);
-        TextView state = text(ready ? "配置就绪" : "还差一步", 15, TEXT, true);
-        state.setPadding(dp(8), 0, 0, 0);
-        row.addView(state);
-        View spacer = new View(this);
-        row.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1));
-        row.addView(text("QEMU · TCG", 11, DIM, false));
-        status.addView(row);
-        status.addView(gap(14));
-        status.addView(infoRow("iOS 根镜像", root == null ? "未选择" :
-                BootConfig.shortPath(root), root != null && BootConfig.looksLikeHfs(root)));
-        status.addView(gap(10));
-        status.addView(infoRow("内核 payload", payload == null ? "未选择" :
-                BootConfig.shortPath(payload), payload != null && BootConfig.looksLikePayload(payload)));
-        status.addView(gap(14));
-        TextView note = text("根镜像与 3GB 客户机内存放在应用内部存储，QEMU 直接读写。"
-                + "启动后可在“停止”里保存快照，下次秒开。", 11, DIM, false);
-        status.addView(note);
-        c.addView(status);
-        c.addView(gap(14));
+        displayArea = new FrameLayout(this);
+        displayArea.setBackgroundColor(Color.BLACK);
+        FrameLayout.LayoutParams areaLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        areaLp.topMargin = U();
+        areaLp.bottomMargin = U() + dp(8);
+        areaLp.leftMargin = U() + dp(4);
+        areaLp.rightMargin = U() + dp(4);
+        screen.addView(displayArea, areaLp);
 
-        c.addView(action(canResume() ? "快速启动 iOS（快照）" : "启动 iOS 虚拟机",
-                true, v -> startIos()), wide());
-        if (canResume()) {
-            c.addView(gap(10));
-            c.addView(action("冷启动 iOS（不使用快照）", false, v -> startIos(false)), wide());
+        fbView = new FramebufferView(this);
+        fbView.setTouchListener((type, x, y) -> {
+            TouchSender sender = touch;
+            if (sender != null) sender.send(type, x, y);
+        });
+        displayArea.addView(fbView);
+        if (running) engine.setView(fbView);
+        updateDisplayGeometry();
+        displayArea.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob) -> updateDisplayGeometry());
+
+        LinearLayout volume = new LinearLayout(this);
+        volume.setOrientation(LinearLayout.VERTICAL);
+        volume.setGravity(Gravity.CENTER);
+        TextView volUp = placeholderControl("+", "音量增加（预留）", 18);
+        TextView volDown = placeholderControl("−", "音量减少（预留）", 18);
+        LinearLayout.LayoutParams sideHalf = new LinearLayout.LayoutParams(U(), (int)(U()*1.5f));
+        volume.addView(volUp, sideHalf);
+        volume.addView(volDown, new LinearLayout.LayoutParams(U(), (int)(U()*1.5f)));
+        FrameLayout.LayoutParams vlp = new FrameLayout.LayoutParams(U(), U()*3,
+                Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        vlp.leftMargin = dp(4);
+        screen.addView(volume, vlp);
+
+        TextView power = placeholderControl("⏻", "电源按钮（预留）", 20);
+        FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(U(), U()*3,
+                Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        plp.rightMargin = dp(4);
+        screen.addView(power, plp);
+
+        LinearLayout bottom = new LinearLayout(this);
+        bottom.setOrientation(LinearLayout.HORIZONTAL);
+        bottom.setGravity(Gravity.CENTER);
+        bottom.setPadding(0, 0, 0, 0);
+        bottom.setBackgroundColor(0xFF111111);
+        startButton = bottomButton("▶", "启动", true, () -> {
+            if (!vmActive && cfg.rootFile() != null) startIos();
+        });
+        bottom.addView(startButton, new LinearLayout.LayoutParams(U(), U()));
+        modeOne = bottomButton("1:1", "原始尺寸", !running, () -> setDisplayMode(0));
+        bottom.addView(modeOne, new LinearLayout.LayoutParams(U()*3, U()));
+        modeShrink = bottomButton("缩小", "缩小到 80%", !running, () -> setDisplayMode(1));
+        bottom.addView(modeShrink, new LinearLayout.LayoutParams(U()*3, U()));
+        modeFull = bottomButton("全屏", "等比铺满", !running, () -> setDisplayMode(2));
+        bottom.addView(modeFull, new LinearLayout.LayoutParams(U()*3, U()));
+        immersiveButton = bottomButton("◉", "沉浸", true, () -> setImmersive(true));
+        bottom.addView(immersiveButton, new LinearLayout.LayoutParams(U(), U()));
+        FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(
+                U()*11, U(), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        bottomLp.bottomMargin = dp(4);
+        screen.addView(bottom, bottomLp);
+
+        View.OnClickListener chooseRoot = v -> {
+            if (!vmActive && (cfg.rootFile() == null || !cfg.rootFile().isFile())) pick(REQ_ROOT);
+        };
+        if (cfg.rootFile() == null || !cfg.rootFile().isFile()) {
+            TextView overlay = text("点击选择系统镜像", 18, Color.WHITE, true);
+            overlay.setGravity(Gravity.CENTER);
+            overlay.setBackgroundColor(0x99000000);
+            displayArea.addView(overlay, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            overlay.setOnClickListener(chooseRoot);
+            screen.setOnClickListener(chooseRoot);
         }
-        c.addView(gap(10));
-        c.addView(action("运行引擎自检（无需 iOS）", false, v -> startDemo()), wide());
-        c.addView(gap(20));
-        c.addView(sectionLabel("镜像与 payload"));
-        c.addView(gap(8));
-        c.addView(action("选择 iOS 根镜像（HFS+ raw）", false, v -> pick(REQ_ROOT)), wide());
-        c.addView(gap(8));
-        c.addView(action("选择内核 payload（SWEETXNU）", false, v -> pick(REQ_PAYLOAD)), wide());
-        c.addView(gap(20));
-        c.addView(sectionLabel("调试"));
-        c.addView(gap(8));
-        LinearLayout debug = new LinearLayout(this);
-        debug.setOrientation(LinearLayout.HORIZONTAL);
-        TextView adv = action("高级启动参数", false, v -> showAdvanced());
-        TextView logs = action("运行日志", false, v -> showLogs());
-        LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1);
-        lp1.rightMargin = dp(5);
-        LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1);
-        lp2.leftMargin = dp(5);
-        debug.addView(adv, lp1);
-        debug.addView(logs, lp2);
-        c.addView(debug, wide());
-        c.addView(gap(20));
-        c.addView(sectionLabel("说明"));
-        c.addView(gap(8));
-        TextView legal = text(
-                "这是一个实验性虚拟机：QEMU TCG 软件模拟 ARM64，没有 GPU 加速，启动和动画会很慢。\n\n"
-                        + "App 不附带 Apple 的 iOS 系统文件。你需要自备 iPhone X iOS 16.7.16 IPSW，"
-                        + "在 Linux/macOS 上用 tools/mkiosroot.sh 生成 HFS+ 根镜像；payload 用 "
-                        + "tools/mkadt.py --qemu 和 tools/mkpayload.py 构建。\n\n"
-                        + "首次启动建议先跑“引擎自检”，确认显示链路正常。\n\n"
-                        + "触摸已通过 sweet-touch（GENI SE7 + GT9896）接入；电源/音量键尚未接入。",
-                12, DIM, false);
-        legal.setLineSpacing(dp(3), 1.2f);
-        c.addView(legal);
-        c.addView(gap(10));
-        TextView help = text("如何构建镜像和 payload？", 12, ACCENT, true);
-        help.setPadding(0, dp(6), 0, dp(6));
-        help.setOnClickListener(v -> showHelp());
-        c.addView(help);
+        refreshMainControls(running);
+        if (immersiveUi) applyImmersiveVisibility();
+        ui.removeCallbacks(hostStatsTicker);
+        ui.post(hostStatsTicker);
     }
+
+    private void addMetricGap(LinearLayout row) {
+        View gap = new View(this);
+        row.addView(gap, new LinearLayout.LayoutParams(dp(12), 1));
+    }
+
+    private TextView bottomButton(String glyph, String label, boolean enabled, Runnable action) {
+        TextView v = text(glyph, 13, enabled ? TEXT : 0xFF666666, true);
+        v.setGravity(Gravity.CENTER);
+        v.setContentDescription(label);
+        v.setBackground(outline(SURFACE_2, STROKE, 8, 1));
+        v.setEnabled(enabled);
+        v.setOnClickListener(view -> { if (v.isEnabled()) action.run(); });
+        return v;
+    }
+
+    private void refreshMainControls(boolean running) {
+        if (startButton != null) {
+            boolean ready = cfg.rootFile() != null && cfg.rootFile().isFile()
+                    && BootAssets.payloadFile(this).isFile();
+            startButton.setEnabled(!running && ready);
+            startButton.setAlpha(startButton.isEnabled() ? 1f : 0.35f);
+        }
+        if (modeOne != null) {
+            boolean canOne = displayArea != null && displayArea.getWidth() > 1125
+                    && displayArea.getHeight() > 2436;
+            modeOne.setEnabled(!running && canOne);
+            modeOne.setAlpha(modeOne.isEnabled() ? 1f : 0.35f);
+        }
+        if (modeShrink != null) { modeShrink.setEnabled(!running); modeShrink.setAlpha(running ? .35f : 1f); }
+        if (modeFull != null) { modeFull.setEnabled(!running); modeFull.setAlpha(running ? .35f : 1f); }
+        if (immersiveButton != null) immersiveButton.setEnabled(!running);
+    }
+
+    private void setDisplayMode(int mode) {
+        if (mode == 0 && (displayArea == null || displayArea.getWidth() <= 1125
+                || displayArea.getHeight() <= 2436)) return;
+        displayMode = mode;
+        updateDisplayGeometry();
+    }
+
+    private void updateDisplayGeometry() {
+        if (displayArea == null || fbView == null) return;
+        int w = displayArea.getWidth(), h = displayArea.getHeight();
+        if (w <= 0 || h <= 0) return;
+        float scale;
+        if (displayMode == 0) scale = 1f;
+        else if (displayMode == 1) scale = (w * .80f) / 1125f;
+        else scale = Math.min(w / 1125f, h / 2436f);
+        int fw = Math.max(1, Math.round(1125f * scale));
+        int fh = Math.max(1, Math.round(2436f * scale));
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(fw, fh, Gravity.CENTER);
+        fbView.setLayoutParams(lp);
+        if (modeOne != null) {
+            boolean allowed = w > 1125 && h > 2436;
+            modeOne.setEnabled(allowed && !vmActive);
+            modeOne.setAlpha(modeOne.isEnabled() ? 1f : .35f);
+        }
+    }
+
+    private void setImmersive(boolean enabled) {
+        immersiveUi = enabled;
+        applyImmersiveVisibility();
+        if (enabled) toast("点击相同位置即可呼出按钮");
+    }
+
+    private void applyImmersiveVisibility() {
+        if (rootView == null || rootView.getChildCount() == 0) return;
+        View screen = rootView.getChildAt(0);
+        if (!(screen instanceof ViewGroup)) return;
+        ViewGroup group = (ViewGroup) screen;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            child.setVisibility(immersiveUi ? View.GONE : View.VISIBLE);
+        }
+        if (immersiveUi) {
+            screen.setOnClickListener(v -> setImmersive(false));
+            if (fbView != null) fbView.setOnClickListener(v -> setImmersive(false));
+        } else {
+            screen.setOnClickListener(null);
+            if (fbView != null) fbView.setOnClickListener(null);
+        }
+    }
+
+    private int readHostCpuPercent() {
+        try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader("/proc/stat"))) {
+            String line = r.readLine();
+            if (line == null || !line.startsWith("cpu ")) return -1;
+            String[] p = line.trim().split("\\s+");
+            long total = 0;
+            for (int i = 1; i < p.length; i++) total += Long.parseLong(p[i]);
+            long idle = Long.parseLong(p[4]) + (p.length > 5 ? Long.parseLong(p[5]) : 0);
+            int percent = -1;
+            if (previousHostTotal >= 0 && total > previousHostTotal) {
+                long dt = total - previousHostTotal, di = idle - previousHostIdle;
+                percent = (int)Math.max(0, Math.min(100, (dt-di)*100/dt));
+            }
+            previousHostTotal = total; previousHostIdle = idle;
+            return percent;
+        } catch (Exception e) { return -1; }
+    }
+
+    private String readHostRam() {
+        try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader("/proc/meminfo"))) {
+            long total = -1, available = -1; String line;
+            while ((line = r.readLine()) != null) {
+                if (line.startsWith("MemTotal:")) total = Long.parseLong(line.replaceAll("[^0-9]", ""));
+                else if (line.startsWith("MemAvailable:")) available = Long.parseLong(line.replaceAll("[^0-9]", ""));
+            }
+            if (total > 0 && available >= 0) {
+                long used = (total-available)/1024;
+                return String.format(Locale.US, "RAM %.0f/%.0f GB", used/1024.0/1024.0, total/1024.0/1024.0);
+            }
+        } catch (Exception ignored) { }
+        return "RAM --/-- GB";
+    }
+
+    private final Runnable hostStatsTicker = new Runnable() {
+        @Override public void run() {
+            if (hostClock != null) {
+                long seconds = vmActive ? Math.max(0,(System.currentTimeMillis()-vmStartedAt)/1000) : 0;
+                hostClock.setText(String.format(Locale.US,"⏱ %02d:%02d:%02d",
+                        seconds/3600,(seconds/60)%60,seconds%60));
+            }
+            int cpu = readHostCpuPercent();
+            if (hostCpu != null) hostCpu.setText(cpu < 0 ? "CPU --%" : "CPU " + cpu + "%");
+            if (hostRam != null) hostRam.setText(readHostRam());
+            ui.postDelayed(this,1000);
+        }
+    };
 
     private LinearLayout.LayoutParams wide() {
         return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -874,97 +1026,27 @@ public final class MainActivity extends Activity {
     }
 
     private void showVmScreen() {
-        // Immersive status bar; keep Android navigation available.
-        setVmSystemBars(true);
-        clearRoot();
+        immersiveUi = false;
+        showMainScreen(true);
+    }
 
-        FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.BLACK);
-
-        // Center the native-size guest display. Controls are positioned only in
-        // the side gutters and never overlap the framebuffer rectangle.
-        fbView = new FramebufferView(this);
-        fbView.setTouchListener((type, x, y) -> {
-            TouchSender t = touch;
-            if (t != null) {
-                t.send(type, x, y);
+    private TextView placeholderControl(String glyph, String description, int sizeSp) {
+        TextView control = text(glyph, sizeSp, TEXT, true);
+        control.setGravity(Gravity.CENTER);
+        control.setBackground(outline(SURFACE_2, STROKE, 8, 1));
+        control.setContentDescription(description);
+        control.setClickable(true);
+        control.setFocusable(false);
+        control.setOnTouchListener((v, event) -> {
+            if (event.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+                v.setAlpha(0.55f);
+            } else if (event.getAction() == android.view.MotionEvent.ACTION_UP
+                    || event.getAction() == android.view.MotionEvent.ACTION_CANCEL) {
+                v.setAlpha(1f);
             }
+            return true;
         });
-        // The guest panel occupies a fixed 1125 x 2436 Android-pixel rectangle.
-        // Center that exact-size View in the full black display; never fit or stretch it.
-        FrameLayout.LayoutParams fbLp = new FrameLayout.LayoutParams(
-                1125, 2436, Gravity.CENTER);
-        root.addView(fbView, fbLp);
-
-        LinearLayout metrics = new LinearLayout(this);
-        metrics.setOrientation(LinearLayout.HORIZONTAL);
-        metrics.setGravity(Gravity.CENTER);
-        metrics.setPadding(dp(9), dp(4), dp(9), dp(4));
-        metrics.setBackground(outline(SURFACE, STROKE, 10, 1));
-        vmTimer = text("00:00:00", 12, TEXT, true);
-        metrics.addView(vmTimer);
-        View metricGap = new View(this);
-        metrics.addView(metricGap, new LinearLayout.LayoutParams(dp(8), 1));
-        vmCpu = text("QEMU CPU --%", 10, DIM, true);
-        metrics.addView(vmCpu);
-        FrameLayout.LayoutParams metricsLp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, dp(30),
-                Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        root.addView(metrics, metricsLp);
-
-        // Compact side-mounted volume rocker. The 30dp outer column remains
-        // outside the guest panel; buttons are aligned to the panel's vertical
-        // center, rather than screen corners.
-        LinearLayout volumeColumn = new LinearLayout(this);
-        volumeColumn.setOrientation(LinearLayout.VERTICAL);
-        volumeColumn.setGravity(Gravity.CENTER);
-        volumeColumn.setPadding(0, dp(3), 0, dp(3));
-        volumeColumn.setBackground(outline(SURFACE, STROKE, 12, 1));
-
-        TextView volumeUp = placeholderControl("+", "音量增加（预留）", 16);
-        TextView volumeDown = placeholderControl("−", "音量减少（预留）", 16);
-        LinearLayout.LayoutParams rockerButtonLp =
-                new LinearLayout.LayoutParams(dp(26), dp(42));
-        volumeColumn.addView(volumeUp, rockerButtonLp);
-        View rockerGap = new View(this);
-        volumeColumn.addView(rockerGap, new LinearLayout.LayoutParams(1, dp(4)));
-        volumeColumn.addView(volumeDown,
-                new LinearLayout.LayoutParams(dp(26), dp(42)));
-
-        TextView power = placeholderControl("⏻", "电源按钮（预留）", 16);
-        // Match the power key's length to the complete two-button volume rocker.
-        final int sideControlHeight = dp(94); // 42 + 4 + 42 + 3 + 3 dp
-        FrameLayout.LayoutParams powerLp = new FrameLayout.LayoutParams(
-                dp(30), sideControlHeight, Gravity.RIGHT | Gravity.TOP);
-        root.addView(power, powerLp);
-        FrameLayout.LayoutParams volumeLp = new FrameLayout.LayoutParams(
-                dp(30), ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.LEFT | Gravity.TOP);
-        root.addView(volumeColumn, volumeLp);
-
-        // Keep metrics in the top letterbox margin. If the device is too short
-        // to provide a margin, anchor them at the top without covering content.
-        root.addOnLayoutChangeListener((v, left, top, right, bottom,
-                                       oldLeft, oldTop, oldRight, oldBottom) -> {
-            int panelTop = (v.getHeight() - Payload.FB_H) / 2;
-            FrameLayout.LayoutParams mlp = (FrameLayout.LayoutParams) metrics.getLayoutParams();
-            mlp.topMargin = Math.max(0, panelTop - dp(34));
-            metrics.setLayoutParams(mlp);
-
-            // Place both side-control groups with their vertical center at 1/4 screen height.
-            int controlsTop = Math.max(0, v.getHeight() / 4 - sideControlHeight / 2);
-            FrameLayout.LayoutParams plp = (FrameLayout.LayoutParams) power.getLayoutParams();
-            plp.topMargin = controlsTop;
-            power.setLayoutParams(plp);
-            FrameLayout.LayoutParams vlp = (FrameLayout.LayoutParams) volumeColumn.getLayoutParams();
-            vlp.topMargin = controlsTop;
-            volumeColumn.setLayoutParams(vlp);
-        });
-
-        vmScreen = root;
-        rootView.addView(root, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        engine.setView(fbView);
+        return control;
     }
 
     private void toggleControls() {
