@@ -53,7 +53,7 @@
  		}
  		if (src != 0 && bpe == 4) {
  			if (fOffload != NULL) {
-@@ -518,6 +550,13 @@
+@@ -518,5 +550,12 @@
  				}
  			}
  		}
@@ -66,4 +66,3 @@
 +		}
  		s->release();
  	}
- 	/* swap_set_blit records
