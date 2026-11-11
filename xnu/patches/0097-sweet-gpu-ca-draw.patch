@@ -536,7 +536,7 @@ index 5488156..9f5d84d 100644
  	while (used[1] == q.used) {
  		if (read32(0x70) & (64 | 128)) {
  			online = false;
-@@ -325,7 +345,67 @@ SweetVirtioConsole::send(const void *data, size_t bytes)
+@@ -325,6 +345,67 @@ SweetVirtioConsole::send(const void *data, size_t bytes)
  	return status;
  }
  
