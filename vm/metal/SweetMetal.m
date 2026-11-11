@@ -2109,6 +2109,26 @@ sweet_readable_extent(const void *pointer, unsigned long want)
  * own lookup/lock references and release them at encoder completion.
  */
 static int
+sweet_render_surface_fail(const char *reason, unsigned long width,
+    unsigned long height, unsigned long bpr, int result)
+{
+    static unsigned int logs;
+    if (logs < 64) {
+        logs++;
+        if (console_fd < 0) {
+            console_fd = open("/dev/console", 1);
+        }
+        if (console_fd >= 0) {
+            dprintf(console_fd,
+                "SWEETMETAL: IOSurface create failed reason=%s size=%lux%lu "
+                "bpr=%lu result=%d%c",
+                reason, width, height, bpr, result, 10);
+        }
+    }
+    return -1;
+}
+
+static int
 sweet_render_surface_create(unsigned long width, unsigned long height,
     void **out_ref, unsigned int *out_seed, unsigned int *out_id,
     unsigned char **out_base, unsigned long *out_bpr)
@@ -2117,7 +2137,8 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 	void *cf = dlopen(
 	    "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", 2);
 	if (cf == 0) {
-		return -1;
+		return sweet_render_surface_fail("CoreFoundation dlopen", width,
+		    height, 0, -1);
 	}
 	SweetCFType (*dict_new)(SweetCFType, long, const void *, const void *) =
 	    dlsym(cf, "CFDictionaryCreateMutable");
@@ -2137,7 +2158,8 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 	    width > 8192 || height > 8192 || width * 4 > 0x7fffffffUL ||
 	    (height != 0 && ((width * 4 + 63) & ~63UL) >
 	        0x7fffffffUL / height)) {
-		return -1;
+		return sweet_render_surface_fail("required symbols or dimensions",
+		    width, height, 0, -1);
 	}
 	void *(*surface_create)(SweetCFType) = dlsym(ios, "IOSurfaceCreate");
 	unsigned int (*get_id)(SweetCFType) = dlsym(ios, "IOSurfaceGetID");
@@ -2150,11 +2172,13 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 	void (*release_surface)(SweetCFType) = dlsym(ios, "IOSurfaceRelease");
 	if (surface_create == 0 || get_id == 0 || get_base == 0 ||
 	    get_bpr == 0 || lock == 0 || unlock == 0 || release_surface == 0) {
-		return -1;
+		return sweet_render_surface_fail("IOSurface symbols", width, height,
+		    0, -1);
 	}
 	SweetCFType dict = dict_new(0, 8, kcb, vcb);
 	if (dict == 0) {
-		return -1;
+		return sweet_render_surface_fail("CFDictionaryCreateMutable", width,
+		    height, requested_bpr, -1);
 	}
 	unsigned long requested_bpr = (width * 4 + 63) & ~63UL;
 	struct { const char *key; int value; } props[] = {
@@ -2180,17 +2204,21 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 	}
 	if (!properties_ok) {
 		cf_release(dict);
-		return -1;
+		return sweet_render_surface_fail("IOSurface properties", width,
+		    height, requested_bpr, -1);
 	}
 	SweetCFType ref = surface_create(dict);
 	cf_release(dict);
 	if (ref == 0) {
-		return -1;
+		return sweet_render_surface_fail("IOSurfaceCreate", width, height,
+		    requested_bpr, -1);
 	}
 	unsigned int seed = 0;
-	if (lock(ref, 0, &seed) != 0) {
+	int lock_result = lock(ref, 0, &seed);
+	if (lock_result != 0) {
 		release_surface(ref);
-		return -1;
+		return sweet_render_surface_fail("IOSurfaceLock", width, height,
+		    requested_bpr, lock_result);
 	}
 	unsigned int identifier = get_id(ref);
 	unsigned char *base = (unsigned char *)get_base(ref);
@@ -2198,7 +2226,9 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 	if (identifier == 0 || base == 0 || bpr < width * 4) {
 		unlock(ref, 0, &seed);
 		release_surface(ref);
-		return -1;
+		const char *reason = identifier == 0 ? "IOSurfaceGetID" :
+		    (base == 0 ? "IOSurfaceGetBaseAddress" : "bytes-per-row validation");
+		return sweet_render_surface_fail(reason, width, height, bpr, -1);
 	}
 	*out_ref = (void *)ref;
 	*out_seed = seed;
