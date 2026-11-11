@@ -35,13 +35,6 @@ jobs:
             APK=/tmp/upstream-apk/app-debug.apk
           fi
           test -s "$APK"
-          unzip -Z1 "$APK" | grep -Fx 'assets/boot/sweet-qemu-gpu-payload.bin'
-          unzip -Z1 "$APK" | grep -Fx 'assets/boot/payload.sha256'
-          unzip -p "$APK" assets/boot/sweet-qemu-gpu-payload.bin > /tmp/bundled-payload.bin
-          unzip -p "$APK" assets/boot/payload.sha256 | tr -d '\r\n' > /tmp/bundled-payload.sha256
-          test -s /tmp/bundled-payload.bin
-          test "$(sha256sum /tmp/bundled-payload.bin | awk '{print $1}')" = "$(cat /tmp/bundled-payload.sha256)"
-          echo "Verified bundled Host Raster payload SHA-256: $(cat /tmp/bundled-payload.sha256)"
           mkdir -p /tmp/engine-stage
           unzip -oq "$APK" 'assets/engine/arm64-v8a/*' -d /tmp/engine-stage
           ENGINE_DIR=android/app/src/main/assets/engine/arm64-v8a
@@ -141,6 +134,13 @@ jobs:
           set -euo pipefail
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
+          unzip -Z1 "$APK" | grep -Fx 'assets/boot/sweet-qemu-gpu-payload.bin'
+          unzip -Z1 "$APK" | grep -Fx 'assets/boot/payload.sha256'
+          unzip -p "$APK" assets/boot/sweet-qemu-gpu-payload.bin > /tmp/bundled-payload.bin
+          unzip -p "$APK" assets/boot/payload.sha256 | tr -d '\r\n' > /tmp/bundled-payload.sha256
+          test -s /tmp/bundled-payload.bin
+          test "$(sha256sum /tmp/bundled-payload.bin | awk '{print $1}')" = "$(cat /tmp/bundled-payload.sha256)"
+          echo "Verified bundled Host Raster payload SHA-256: $(cat /tmp/bundled-payload.sha256)"
           unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/qemu-system-aarch64'
           unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/libglib-2.0.so.0'
           unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/vmios-engine-version'
