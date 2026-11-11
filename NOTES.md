@@ -1,24 +1,25 @@
 # vmios working notes
 
-### >>> ACTIVE: 未合并修复已选择性移植，构建核验中（2026-11-11 09:52 +08:00）<<<
+### >>> ACTIVE: APK 已成功；XNU 补丁上下文修复后重建，Payload 待触发（2026-11-11 10:20 +08:00）<<<
 
-- 用户要求：把前次分支审计发现的未合并修复移植到当前 `apk`、`xun`、`payload`；直接操作，不使用 Work，不反复确认。
-- APK 分支修改：
-  - `EngineAssets.java` commit `91abe57743d8`：以 QEMU 资产 SHA256 指纹判断引擎版本，防止 APK UI 更新导致 snapshot 无谓失效；无 manifest 时回退旧逻辑。
-  - `.github/workflows/build-apk.yml` commit `7498b79f3681`：生成、校验并确认 APK 内含 `vmios-engine-version`。
-  - `VmEngine.java` commit `a9cb82643b0a`：增加 boot stage 日志（payload/RAM/engine/QEMU/PSCI/首帧）；3 GiB RAM prealloc 变为仅 bootargs 含 `sweet_prealloc=1` 时启用。保留现有真 4 vCPU 配置和 taskset `fc`，没有移植旧分支 cpus=2 强制逻辑。
-  - 未移植旧分支 FramebufferView 1:1 显示/触摸映射及 MainActivity 移除 UI 控件，避免擅改显示交互。
-- Payload 分支修改：
-  - `vm/metal/SweetMetal.m` commit `f1e1788ab006`：fmt550 一次性取证 probe 要求 mapped、64x64、stride 合法、完整 readable extent，按真实 stride 逐行统计；解码/采样函数行为未改。
-  - 原 payload workflow 只有 workflow_dispatch，暂未自动触发；需等本次 XNU build 成功后添加 payload push 触发并绑定该 XNU Run ID。
-- XNU 分支修改：
-  - `xnu/patches/0097-sweet-gpu-ca-draw.patch` commit `890fc4b022f3`：map selector 对 memory-null/allocSize-zero 输出日志；外层返回真实 IOReturn；增加内存分配失败时 wired/limit 日志。
-  - 修正之前审计误判：移植前 xun 的 map selector 仍无条件返回 success；本次已改为真实 result。
-  - 这些改动是错误传播+诊断，不是分配根因修复，`s->memory == NULL` 仍待进一步定位。
-- 触发策略：APK 的 push workflow 已可在 apk 分支触发；XNU patch push 已可在 xun 分支触发。Payload workflow 需后续调整以便自动构建。
-- 记录：`fix/操作记录.md` 已追加本轮详细记录，commit `d55fd44d378e51e384bd40e1dabc874e8303d0fe`。本轮代码提交分别在三个目标分支，未重命名/删除分支，未整支 merge。
-- 设备端验证尚未执行；不能将 CI 成功等同于真机修复成功。
-- 下一步：检查 APK/XNU Actions；XNU 成功后调整 payload workflow 并触发 payload，确保使用本次新 kernel artifact。
+- 用户要求：将未合并修复移植到当前 `apk`、`xun`、`payload`，直接执行、不反复确认。
+- APK：
+  - `EngineAssets.java` commit `91abe57743d8`：以 QEMU engine asset fingerprint 判断 snapshot 有效性，旧 APK 缺少 manifest 时回退旧逻辑。
+  - `.github/workflows/build-apk.yml` commit `368eed017e6f`：生成并验证 `vmios-engine-version` manifest。
+  - `VmEngine.java` commit `a9cb82643b0a`：boot stage/first-frame timing，3 GiB prealloc 改为 bootargs 显式 `sweet_prealloc=1` 才启用。保留当前 4 vCPU 参数解析与 taskset `fc`，未移植旧分支强制 cpus=2 或 UI/Framebuffer 改动。
+  - 最终 APK Run [42943540078](https://github.com/wangyitao978-blip/vms/actions/runs/42943540078)，SHA `368eed017e6f`，success；artifact `vmios-debug-apk-with-engine`（约 50.6 MB），校验步骤成功。
+- Payload：
+  - `vm/metal/SweetMetal.m` commit `f1e1788ab006`：fmt550 一次性 probe 检查 mapped、64x64、stride、完整 readable extent，并按真实 stride 访问；未改 `sweet_texel` 解码行为。
+  - Payload workflow 当前仍仅 workflow_dispatch；等有效 XNU kernel artifact 生成后，加入 push 触发并绑定该 XNU Run ID。
+- XNU：
+  - `xnu/patches/0097-sweet-gpu-ca-draw.patch`：map selector 返回真实 IOReturn，增加 memory-null/allocSize-zero 与 allocation failure 日志；不保证分配必成功，真正 `s->memory == NULL` 根因仍待修。
+  - 发现前两次 XNU runs `42942779811` / `42943905307` 的 logs 都明确跳过 0097；其中后者即使 workflow success 也不能使用其 kernel artifact。
+  - 已重建 patch 依赖：0046 创建 SweetSurface.cpp，0068 在 create 函数之前净增加 12 行；发现 0097 SweetSurface hunk 中失败分支 context 行缺少 3 个 tab。已补齐并逐行比对 0046+0068 重建源码，提交 `e40ac0766304`。
+  - 新 XNU Run [42945105533](https://github.com/wangyitao978-blip/vms/actions/runs/42945105533)，SHA `e40ac0766304`，Build 步骤 in_progress；必须检查日志确认 0097 不再 skipped 后才能接受。
+  - 另一个既有 patch `0098-sweet-fb-copy-diagnostics.patch` 仍被 CI 报 corrupt patch at line 69；不是本次移植内容，暂未修改。
+- 对 `fix/offscreen-iosurface-textures` 复核：当前 payload 已有 IOSurface render target、surface map/unmap、ownsRenderSurface 和 tex_mapped 路径；关键 ensureRenderPixels 逻辑与旧分支一致，当前版本还保留 pixel_format 检查和 getpagesize 动态页长，未发现需额外回灌的独有修复。
+- 记录：`fix/操作记录.md` 已追加所有变更、失败构建和修正经过；最近记录 commit `53aeb877ad874a7ac5ddc7f7dacc8bbe1c9e9e34`。本轮不改分支名、不删分支、不整支合并。
+- 设备端尚未验证；CI 成功不代表显示或性能问题已解决。
 
 
 ---
