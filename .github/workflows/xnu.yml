@@ -114,16 +114,23 @@ jobs:
         run: bash build.sh
 
       - name: Verify SweetSurface patch is present in the built source tree
-        if: success()
+        if: always()
         run: |
-          set -euo pipefail
-          SURFACE="dxb/xnu/iokit/Kernel/arm/SweetSurface.cpp"
-          GPU="dxb/xnu/iokit/Kernel/arm/SweetGPU.cpp"
-          test -s "$SURFACE"
-          test -s "$GPU"
-          grep -q 'SWEET SURF: memory' "$SURFACE"
-          grep -q 'kSweetGPUSurfaceMap' "$GPU"
-          echo "0097 verified in patched XNU source tree."
+          set -uo pipefail
+          echo "--- rejected hunks ---"
+          find dxb -name '*.rej' -print -exec head -20 {} \; || true
+          echo "--- patched sources ---"
+          find dxb -path '*iokit/Kernel/arm/SweetSurface.cpp' -print || true
+          SURFACE="$(find dxb -path '*iokit/Kernel/arm/SweetSurface.cpp' -print -quit)"
+          test -n "$SURFACE" || { echo "::error::SweetSurface.cpp not found in build tree"; exit 1; }
+          GPU="$(find dxb -path '*iokit/Kernel/arm/SweetGPU.cpp' -print -quit)"
+          test -n "$GPU" || { echo "::error::SweetGPU.cpp not found in build tree"; exit 1; }
+          if grep -q 'SWEET SURF: memory' "$SURFACE" && grep -q 'kSweetGPUSurfaceMap' "$GPU"; then
+            echo "0097 applied."
+          else
+            echo "::error::0097 NOT applied (expected SweetSurface/SweetGPU markers are missing)"
+            exit 1
+          fi
           {
             echo '### XNU patch verification'
             echo '- 0097 SweetSurface allocation and GPU surface-map changes are present in the source tree.'

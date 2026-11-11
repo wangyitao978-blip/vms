@@ -1,5 +1,5 @@
---- a/xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
-+++ b/xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
 @@ -394,6 +394,7 @@
  AppleCLCD::present(const uint8_t *rec)
  {
