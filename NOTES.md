@@ -1,25 +1,29 @@
 # vmios working notes
 
-### >>> ACTIVE: APK 已成功；XNU 补丁上下文修复后重建，Payload 待触发（2026-11-11 10:20 +08:00）<<<
+### >>> ACTIVE: 三分支修复已移植并构建成功（2026-11-11 10:27 +08:00）<<<
 
-- 用户要求：将未合并修复移植到当前 `apk`、`xun`、`payload`，直接执行、不反复确认。
-- APK：
-  - `EngineAssets.java` commit `91abe57743d8`：以 QEMU engine asset fingerprint 判断 snapshot 有效性，旧 APK 缺少 manifest 时回退旧逻辑。
+- 用户要求：将审计发现的未合并修复移植到当前 `apk`、`xun`、`payload`；不反复确认。
+- APK 分支：
+  - `EngineAssets.java` commit `91abe57743d8`：以 QEMU engine asset fingerprint 判断 snapshot 有效性，缺少 manifest 时回退旧逻辑。
   - `.github/workflows/build-apk.yml` commit `368eed017e6f`：生成并验证 `vmios-engine-version` manifest。
-  - `VmEngine.java` commit `a9cb82643b0a`：boot stage/first-frame timing，3 GiB prealloc 改为 bootargs 显式 `sweet_prealloc=1` 才启用。保留当前 4 vCPU 参数解析与 taskset `fc`，未移植旧分支强制 cpus=2 或 UI/Framebuffer 改动。
-  - 最终 APK Run [42943540078](https://github.com/wangyitao978-blip/vms/actions/runs/42943540078)，SHA `368eed017e6f`，success；artifact `vmios-debug-apk-with-engine`（约 50.6 MB），校验步骤成功。
-- Payload：
-  - `vm/metal/SweetMetal.m` commit `f1e1788ab006`：fmt550 一次性 probe 检查 mapped、64x64、stride、完整 readable extent，并按真实 stride 访问；未改 `sweet_texel` 解码行为。
-  - Payload workflow 当前仍仅 workflow_dispatch；等有效 XNU kernel artifact 生成后，加入 push 触发并绑定该 XNU Run ID。
-- XNU：
-  - `xnu/patches/0097-sweet-gpu-ca-draw.patch`：map selector 返回真实 IOReturn，增加 memory-null/allocSize-zero 与 allocation failure 日志；不保证分配必成功，真正 `s->memory == NULL` 根因仍待修。
-  - 发现前两次 XNU runs `42942779811` / `42943905307` 的 logs 都明确跳过 0097；其中后者即使 workflow success 也不能使用其 kernel artifact。
-  - 已重建 patch 依赖：0046 创建 SweetSurface.cpp，0068 在 create 函数之前净增加 12 行；发现 0097 SweetSurface hunk 中失败分支 context 行缺少 3 个 tab。已补齐并逐行比对 0046+0068 重建源码，提交 `e40ac0766304`。
-  - 新 XNU Run [42945105533](https://github.com/wangyitao978-blip/vms/actions/runs/42945105533)，SHA `e40ac0766304`，Build 步骤 in_progress；必须检查日志确认 0097 不再 skipped 后才能接受。
-  - 另一个既有 patch `0098-sweet-fb-copy-diagnostics.patch` 仍被 CI 报 corrupt patch at line 69；不是本次移植内容，暂未修改。
-- 对 `fix/offscreen-iosurface-textures` 复核：当前 payload 已有 IOSurface render target、surface map/unmap、ownsRenderSurface 和 tex_mapped 路径；关键 ensureRenderPixels 逻辑与旧分支一致，当前版本还保留 pixel_format 检查和 getpagesize 动态页长，未发现需额外回灌的独有修复。
-- 记录：`fix/操作记录.md` 已追加所有变更、失败构建和修正经过；最近记录 commit `53aeb877ad874a7ac5ddc7f7dacc8bbe1c9e9e34`。本轮不改分支名、不删分支、不整支合并。
-- 设备端尚未验证；CI 成功不代表显示或性能问题已解决。
+  - `VmEngine.java` commit `a9cb82643b0a`：boot stage/first-frame timing，3 GiB prealloc 变成 bootargs 显式 `sweet_prealloc=1` 才启用。保留当前真 4 vCPU 参数解析和 taskset `fc`；未移植旧分支强制 cpus=2、删除 UI 控件、Framebuffer 1:1/触摸改动。
+  - APK Run [42943540078](https://github.com/wangyitao978-blip/vms/actions/runs/42943540078)，SHA `368eed017e6f`，success；artifact `vmios-debug-apk-with-engine`（50,606,630 bytes）。
+- Payload 分支：
+  - `vm/metal/SweetMetal.m` commit `f1e1788ab006`：fmt550 一次性 probe 要求 mapped、64x64、stride 合法和完整 readable extent，按真实 stride 访问；未改变 `sweet_texel` 解码行为。
+  - `.github/workflows/build-vmios-full-gpu-payload.yml` commit `1b8cc968c3c8`：增加 payload branch push trigger，固定使用本轮 XNU Run `42945105533`，artifact 等待最多 15 分钟。
+  - Payload Run [42945741772](https://github.com/wangyitao978-blip/vms/actions/runs/42945741772)，SHA `1b8cc968c3c8`，success；artifacts：`vmios-host-raster-payload` 12,562,629 bytes；`vmios-guest-local-raster-payload` 12,562,571 bytes。
+  - 日志明确 `XNU_RUN_ID=42945105533`，下载 kernel SHA256 `f5304a80fd2adef962a9bf0fc7ca3c609e72a3a4d00a88d2977ae1ce22931545`，复制到两个 payload 变体。
+- XNU 分支：
+  - `xnu/patches/0097-sweet-gpu-ca-draw.patch`：map selector 返回真实 IOReturn；对 memory-null/allocSize-zero 和 allocation failure 增加诊断。该补丁仍不是让 `s->memory` 必然非空的根因修复。
+  - 两次旧 XNU run `42942779811` / `42943905307` 的日志都显示跳过 0097，不能使用其 artifact。
+  - 通过从 0046 重建 SweetSurface.cpp、应用 0068 的 +12 行偏移，修复 0097 hunk context 缺失的 3 个 tab；提交 `e40ac0766304`。日志确认 0097 已应用，SweetSurface.cpp、SweetGPU.cpp、SweetVirtioConsole.cpp 已编译。
+  - XNU Run [42945105533](https://github.com/wangyitao978-blip/vms/actions/runs/42945105533)，SHA `e40ac0766304`，success；artifacts：`xnu-kernel`（ZIP digest `f9f30fa1f6d304383bfda3d410214782306501de664e5ac873d1c9f7702f8ce6`）和 `xnu-buildtree`。
+- 旧 `fix/offscreen-iosurface-textures` 分支的核心 IOSurface render-target/map/unmap 路径已在当前 payload；当前版本还包含 pixel_format 检查与动态 getpagesize，未发现需额外回灌的独有修复。
+- 仍待处理的独立问题：
+  - `s->memory == NULL` 真正分配根因未修；本轮只有错误传播和诊断。
+  - 既有 `0098-sweet-fb-copy-diagnostics.patch` 仍在 XNU 日志中被报告 corrupt patch at line 69，本轮未修改。
+  - 设备端尚未安装验证，CI success 不等于真机问题解决。
+- 完整操作/构建/失败记录见 `fix/操作记录.md`。最近记录 commit `38efd00ab6e0`。未改分支名、未删除分支、未整支合并；只将经审查的文件级修改移植到目标分支。
 
 
 ---
