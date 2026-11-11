@@ -119,6 +119,12 @@ jobs:
         if: always()
         run: |
           set -uo pipefail
+          echo "--- skipped patches (captured from Build step) ---"
+          if [ -f xnu-build.log ]; then
+            grep -nE 'Skipping patch|patch failed|corrupt patch' xnu-build.log || true
+          else
+            echo "Build log missing: xnu-build.log"
+          fi
           echo "--- rejected hunks ---"
           find dxb -name '*.rej' -print -exec head -20 {} \; || true
           echo "--- patched sources ---"
