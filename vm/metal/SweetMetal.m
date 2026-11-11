@@ -138,6 +138,8 @@ static id sweet_device_self;
 static char sweet_lib_path[256];
 static unsigned int sweet_accel_port;
 static unsigned sweet_fill_logs;
+static unsigned sweet_offscreen_surface_logs;
+static unsigned sweet_offscreen_target_logs;
 
 static unsigned int
 sweet_iosurface_id(id surface)
@@ -2413,16 +2415,21 @@ sweet_render_surface_create(unsigned long width, unsigned long height,
 	unsigned char *base = 0;
 	unsigned long bpr = 0;
 	void *ref = 0;
-	if (sweet_render_surface_create(tex_width, tex_height, &ref, &seed,
+	if ((unsigned long long)tex_width * (unsigned long long)tex_height * 4 >=
+	    (256u << 10) &&
+	    sweet_render_surface_create(tex_width, tex_height, &ref, &seed,
 	    &identifier, &base, &bpr) == 0) {
 		tex_surface_ref = ref;
 		tex_surface_seed = seed;
 		tex_surface = identifier;
 		tex_pixels = base;
 		tex_bpr = bpr;
-		dprintf(console_fd,
-		    "SWEETMETAL: offscreen IOSurface id=%u %lux%lu bpr=%lu base=%p%c",
-		    identifier, tex_width, tex_height, tex_bpr, tex_pixels, 10);
+		if (sweet_offscreen_surface_logs < 32) {
+			sweet_offscreen_surface_logs++;
+			dprintf(console_fd,
+			    "SWEETMETAL: offscreen IOSurface id=%u %lux%lu bpr=%lu base=%p%c",
+			    identifier, tex_width, tex_height, tex_bpr, tex_pixels, 10);
+		}
 	} else {
 		/*
 		 * Preserve the previous local-only behavior if IOSurface creation
@@ -3147,10 +3154,13 @@ typedef struct {
 		return;
 	}
 	((void (*)(id, SEL))objc_msgSend)(texture, sel_registerName("markRendered"));
-	dprintf(console_fd,
-	    "SWEETMETAL: render target offscreen id=%u %lux%lu bpr=%lu base=%p%c",
-	    identifier, enc_map.width, enc_map.height, enc_map.bytes_per_row,
-	    enc_map.base, 10);
+	if (sweet_offscreen_target_logs < 32) {
+		sweet_offscreen_target_logs++;
+		dprintf(console_fd,
+		    "SWEETMETAL: render target offscreen id=%u %lux%lu bpr=%lu base=%p%c",
+		    identifier, enc_map.width, enc_map.height, enc_map.bytes_per_row,
+		    enc_map.base, 10);
+	}
 }
 - (void)clearRed:(double)red green:(double)green blue:(double)blue
     alpha:(double)alpha
