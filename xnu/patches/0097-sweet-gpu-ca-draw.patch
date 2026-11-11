@@ -322,8 +322,11 @@ index 7f90c56..6c448ff 100644
  #define SWEET_SURFACE_WIRED_MAX         (1536ull << 20)
 
  OSDefineMetaClassAndStructors(SweetSurface, OSObject);
-@@ -80,6 +81,17 @@ SweetSurface::free()
+@@ -80,6 +82,17 @@ SweetSurface::free()
  {
++	if (OSDynamicCast(IOBufferMemoryDescriptor, memory) != NULL) {
++		OSAddAtomic64(-(SInt64)allocSize, (volatile SInt64 *)&sweet_surface_wired);
++	}
 +	if (state != NULL) {
 +		uint32_t alive = (uint32_t)OSDecrementAtomic(&sweet_surface_alive_surfaces) - 1;
 +		uint64_t wired = (uint64_t)OSAddAtomic64(0, (volatile SInt64 *)&sweet_surface_wired);
@@ -356,10 +359,47 @@ index 7f90c56..6c448ff 100644
 +	}
  	return s;
  }
-@@ -686,4 +708,81 @@ IOSurfaceRootUserClient::create(IOExternalMethodArguments *args)
+@@ -686,38 +708,80 @@ IOSurfaceRootUserClient::create(IOExternalMethodArguments *args)
  	ret = sweet_surface_layout(s, props);
- 	if (ret == kIOReturnSuccess) {
- 		IOBufferMemoryDescriptor *mem = NULL;
+-	if (ret == kIOReturnSuccess) {
+-		IOBufferMemoryDescriptor *mem = NULL;
+-		if ((uint64_t)OSAddAtomic64(s->allocSize, (volatile SInt64 *)&sweet_surface_wired) +
+-		    s->allocSize <= SWEET_SURFACE_WIRED_MAX) {
+-			mem = IOBufferMemoryDescriptor::inTaskWithOptions(kernel_task,
+-			    kIODirectionInOut | kIOMemoryKernelUserShared, s->allocSize, page_size);
+-		}
+-		if (mem == NULL) {
+-			OSAddAtomic64(-(SInt64)s->allocSize, (volatile SInt64 *)&sweet_surface_wired);
+-			ret = kIOReturnNoMemory;
+-		} else {
+-			bzero(mem->getBytesNoCopy(), s->allocSize);
+-			s->memory = mem;
+-			s->mapCache = kIOMapDefaultCache;
+-			if (!sweet_surface_publish(s)) {
+-				ret = kIOReturnNoResources;
+-			}
+-		}
+-	}
+-	if (ret != kIOReturnSuccess || sweet_surface_creates_logged < 64) {
+-		char name[32];
+-		proc_selfname(name, sizeof(name));
+-		sweet_surface_creates_logged++;
+-		IOLog("SWEET SURF: %s create id %u %ux%u fmt 0x%x bpe %u bpr %u planes %u size %u keys %u -> 0x%x\n",
+-		    name, s->id, s->width, s->height, s->pixelFormat, s->bytesPerElement,
+-		    s->bytesPerRow, s->planeCount, s->allocSize, props->getCount(), ret);
+-	}
+-	props->release();
+-	if (ret != kIOReturnSuccess) {
+-		s->release();
+-		return ret;
+-	}
+-	ret = returnSurface(s, args);   /* takes the creator's user count */
+-	s->release();
+-	return ret;
+-}
+-
++	if (ret == kIOReturnSuccess) {
++		IOBufferMemoryDescriptor *mem = NULL;
 +		int contiguous = 0;
 +		uint64_t wired_before = (uint64_t)OSAddAtomic64(s->allocSize,
 +		    (volatile SInt64 *)&sweet_surface_wired);
