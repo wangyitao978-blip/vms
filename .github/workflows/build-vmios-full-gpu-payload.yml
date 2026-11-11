@@ -6,6 +6,11 @@ on:
       xnu_run_id:
         description: Successful XNU workflow run ID (artifact name xnu-kernel)
         required: true
+  push:
+    branches: [ payload ]
+    paths:
+      - vm/metal/SweetMetal.m
+      - .github/workflows/build-vmios-full-gpu-payload.yml
 
 permissions:
   actions: read
@@ -13,7 +18,7 @@ permissions:
 
 jobs:
   payload:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -24,14 +29,14 @@ jobs:
       - name: Download the successful XNU kernel with its SMC PSCI conduit
         env:
           GH_TOKEN: ${{ github.token }}
-          XNU_RUN_ID: ${{ inputs.xnu_run_id }}
+          XNU_RUN_ID: ${{ github.event.inputs.xnu_run_id || '42945105533' }}
         run: |
           set -euo pipefail
           # A push can start this workflow while the matching XNU run is
           # still uploading its artifact. Wait for that exact run instead of
           # failing immediately and leaving a stale payload as the only build.
           downloaded=0
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 90); do
             rm -rf /tmp/upstream
             mkdir -p /tmp/upstream
             if gh run download "$XNU_RUN_ID" \
@@ -41,7 +46,7 @@ jobs:
               downloaded=1
               break
             fi
-            echo "XNU artifact not ready (attempt $attempt/30); retrying in 10s"
+            echo "XNU artifact not ready (attempt $attempt/90); retrying in 10s"
             sleep 10
           done
           test "$downloaded" = 1
