@@ -61,5 +61,15 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Updated the APK launcher artwork to use the user's supplied black-and-white image in the launcher PNG resources and adaptive-icon foreground. Kept both launcher resource names (regular/round) consistent.
 - Verified AndroidManifest still uses @string/app_name and strings.xml already sets app_name to "VMs"; no package/applicationId rename was made, preserving installed app data compatibility.
 - Replaced README with a project introduction covering purpose, architecture, current capabilities, limitations, completed engineering work, and the explicit APK/payload status.
-- Confirmed before editing that apk branch had no assets/boot directory, no BootAssets.java, and build-apk.yml did not download a payload. Therefore this branding/documentation change does not claim payload bundling is complete. Future bundle policy: Host Raster only; never Guest Local.
+- At the time of the branding commit, APK did not yet bundle a payload. The subsequent bundling implementation is recorded below.
 - No changes to main or xun. No XNU build triggered.
+
+
+## 2026-11-12 APK bundled Host Raster payload
+- Source payload: successful Payload run `43079641260`, branch `payload`, source commit `3547230786df69f26dd0af59280f43e392b83cfc`; artifact `vmios-host-raster-payload` ID `13882834913` (12,574,633 bytes). The APK workflow validates run status, branch, and workflow path before downloading it. It downloads only `vmios-host-raster-payload`; Guest Local is never requested or packaged.
+- APK workflow adds a pre-build injection step. It verifies the payload against the artifact's `SHA256SUMS`, copies only `sweet-qemu-gpu-payload.bin` into `android/app/src/main/assets/boot/`, and writes `payload.sha256`. Post-build verification checks both asset paths and recomputes the embedded payload SHA-256 from the APK.
+- Added `BootAssets.java`: first launch extracts the asset to `files/vm/sweet-qemu-gpu-payload.bin` through a temporary file, verifies SHA-256, syncs, atomically renames, and records app version + payload hash in `payload.ver`. Later launches reuse it only when marker and actual file hash match.
+- MainActivity starts extraction in a background thread and switches the default payload path to the bundled Host Raster file. Starting iOS is blocked until the bundled file exists; custom/old payload paths are not used for the default boot. User-supplied root image remains external/imported.
+- Removed `bin` from Android `noCompress` configuration so the payload remains compressed in the APK; no legacy `aaptOptions { noCompress "bin" }` was added.
+- Build must be checked against the final APK branch head after this ledger update. CI artifact success is not device validation; on device verify `files/vm/sweet-qemu-gpu-payload.bin` and `files/vm/payload.ver` after first launch.
+- User instruction: do not ask for another “continue”; carry out the bundling and report only after the APK build and artifact verification complete.
