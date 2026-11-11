@@ -603,4 +603,4 @@ index 5488156..9f5d84d 100644
  IOReturn
  SweetVirtioConsole::receive(void *data, size_t *bytes)
  {
- 
++
