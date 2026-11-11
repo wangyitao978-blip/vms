@@ -445,7 +445,7 @@ public final class MainActivity extends Activity {
             TextView overlay = text("点击选择系统镜像", 18, Color.WHITE, true);
             overlay.setGravity(Gravity.CENTER);
             overlay.setBackgroundColor(0x99000000);
-            displayArea.addView(overlay, new FrameLayout.LayoutParams(
+            screen.addView(overlay, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             overlay.setOnClickListener(chooseRoot);
             screen.setOnClickListener(chooseRoot);
