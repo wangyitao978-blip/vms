@@ -1691,3 +1691,11 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - Workflow push paths now include only `.github/workflows/build-apk.yml` and `android/**`, so ledger/README-only edits no longer cause redundant APK builds.
 
 - Final APK after workflow path-filter validation: run `43084384868` success; artifact ID `13884644789` (56,799,787 bytes); APK SHA-256 `92596235e296278653f1f262d60e935b2cff91e01b060edc3140c02834b8ebec`. CI again verified the embedded Host Raster payload hash `7204f83ba7a8370f1134915fc2f47516e66366e038c2d6f62bb06d5b584c4e8d`.
+
+
+### 2026-11-12 A7-A10 unified VMs UI
+- Replaced the old scrollable home page with one programmatic screen for idle and running states: 1U host metrics strip, centered framebuffer, left volume placeholders, right power placeholder, and centered 11U bottom bar. Existing file import, advanced settings, logs, Back-key stop confirmation, and snapshot save paths remain wired.
+- Implemented 1:1 (1125x2436, disabled unless host screen is larger), 80%-host-width shrink, and aspect-fit fullscreen modes. Modes remain changeable during VM execution. Immersive hides all controls and tap restores them. Missing root image creates a full-screen translucent overlay that opens the system document picker anywhere on the screen.
+- Host CPU uses `/proc/stat` deltas; host RAM uses `MemAvailable` from `/proc/meminfo`; status updates every second. Timer starts with VM and resets to zero when stopped. Start is disabled while running; stop remains the Back-key dialog. Side controls are visual-only with press feedback.
+- Final build run `43086133597` success, commit `698ed076a96299944fa4b317655dc738c4c89a41`; artifact ID `13886706807`, 56,802,009 bytes. APK SHA-256 `f6b32d2b84165144c31d55ee0925e56b2a3639b77ccde1c5cb3674995e51479f`. Bundled Host Raster hash `7204f83ba7a8370f1134915fc2f47516e66366e038c2d6f62bb06d5b584c4e8d` verified in final APK; Guest Local excluded.
+- CI compilation/build and APK payload verification passed. Real-device layout, screenshot, picker interaction, immersion touch, and timer/host metrics still require device validation. No main/payload/xun changes and no XNU rebuild.
