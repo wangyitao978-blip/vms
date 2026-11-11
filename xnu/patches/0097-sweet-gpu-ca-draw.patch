@@ -312,7 +312,7 @@ diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.c
 index 7f90c56..6c448ff 100644
 --- a/iokit/Kernel/arm/SweetSurface.cpp
 +++ b/iokit/Kernel/arm/SweetSurface.cpp
-@@ -73,7 +73,9 @@ static uint32_t      sweet_surface_users[SWEET_SURFACE_MAX_ID];
+@@ -73,6 +73,8 @@ static uint32_t      sweet_surface_users[SWEET_SURFACE_MAX_ID];
  static uint32_t      sweet_surface_next_id = 1;
  static uint32_t      sweet_surface_creates_logged;
  static uint64_t      sweet_surface_wired;       /* bytes of buffer surfaces */
@@ -322,7 +322,7 @@ index 7f90c56..6c448ff 100644
  #define SWEET_SURFACE_WIRED_MAX         (1536ull << 20)
 
  OSDefineMetaClassAndStructors(SweetSurface, OSObject);
-@@ -80,7 +82,18 @@ SweetSurface::free()
+@@ -80,6 +82,17 @@ SweetSurface::free()
  {
  	if (OSDynamicCast(IOBufferMemoryDescriptor, memory) != NULL) {
  		OSAddAtomic64(-(SInt64)allocSize, (volatile SInt64 *)&sweet_surface_wired);
@@ -340,7 +340,7 @@ index 7f90c56..6c448ff 100644
 +	}
  	OSSafeReleaseNULL(kernelMap);
  	OSSafeReleaseNULL(memory);
-@@ -126,8 +139,17 @@ sweet_surface_alloc(void)
+@@ -126,7 +139,16 @@ sweet_surface_alloc(void)
  	if (s->state == NULL) {
  		s->release();
  		return NULL;
@@ -357,7 +357,7 @@ index 7f90c56..6c448ff 100644
 +	}
  	return s;
  }
-@@ -686,39 +708,81 @@ IOSurfaceRootUserClient::create(IOExternalMethodArguments *args)
+@@ -686,38 +708,80 @@ IOSurfaceRootUserClient::create(IOExternalMethodArguments *args)
  	ret = sweet_surface_layout(s, props);
 -	if (ret == kIOReturnSuccess) {
 -		IOBufferMemoryDescriptor *mem = NULL;
