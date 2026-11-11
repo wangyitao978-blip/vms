@@ -57,3 +57,10 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Exact patch-tool error: `patch fragment without header at line 325: @@ -80,6 +82,17 @@ SweetSurface::free()`.
 - Root cause found in `0097-sweet-gpu-ca-draw.patch`: an unprefixed empty line between the first and second SweetSurface hunks prematurely terminated the first hunk. Changed that empty context line to a valid context line (single leading space). Patch commit: `86ad44f7da77886f13726e0df3e31f922e36ac8a`.
 - Next verification required: a fresh XNU run must show 0097 applied without skip/reject, pass the SweetSurface/SweetGPU source gate, and only then trigger Payload with that exact run ID. No device validation yet.
+
+
+## 2026-11-11 XNU #58 failure root cause and patch-format correction
+- Full job log for run 42969089309 (commit 86ad44f7da77886f13726e0df3e31f922e36ac8a): XNU compilation completed ("done building xnu"), but the patch tool explicitly skipped both 0097 and 0098. 0097 error: "patch fragment without header at line 325: @@ -80,6 +82,17 @@ SweetSurface::free()". The verification step then failed with exit code 1; Payload dispatch was skipped. Artifacts from this run are diagnostic only, not validated kernel inputs.
+- Independent audit of every 0097 unified-diff hunk found two remaining formatting defects: first SweetSurface hunk declared 6/8 but contained 7/9 lines; the send() hunk declared 6/66 but contained 7/67 after its unprefixed empty context line was restored to a valid context line.
+- Corrected both hunk counts and the missing context prefix. Re-ran a full parser over every 0097 hunk: all declared old/new counts and line prefixes now validate. Patch commit: fa815d28529498e1e04f6dfeb5ba57147338ca1a.
+- Push to xun should trigger a fresh XNU build. Do not dispatch Payload from #58; only use the next run if the log shows 0097 applied (not skipped), the source verification passes, and the kernel artifact SHA is recorded. The 0098 skip is a separate existing patch issue and is not evidence that 0097 applied.
