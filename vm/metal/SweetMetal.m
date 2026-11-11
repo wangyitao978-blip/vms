@@ -1460,10 +1460,17 @@ __attribute__((objc_root_class))
 
 @end
 
-@interface SweetCommandEncoder : SweetObject
-@end
-
-@implementation SweetCommandEncoder
+@interface SweetCommandEncoder : SweetObject {
+	id enc_cpipe;
+	id enc_ctex[8];
+	id enc_cbuf[8];
+	unsigned long enc_cboff[8];
+}
+- (void)setComputePipelineState:(id)state;
+- (void)setTexture:(id)texture atIndex:(unsigned long)index;
+- (void)setBuffer:(id)buffer offset:(unsigned long)offset atIndex:(unsigned long)index;
+- (void)dispatchThreadgroups:(SweetSize)groups threadsPerThreadgroup:(SweetSize)threads;
+- (void)dispatchThreads:(SweetSize)threads threadsPerThreadgroup:(SweetSize)threads_per_group;
 @end
 
 /*
@@ -1540,6 +1547,24 @@ __attribute__((objc_root_class))
 - (id)newComputePipelineStateWithFunction:(id)function error:(id *)error;
 - (id)newRenderPipelineStateWithName:(id)name options:(unsigned long)options
     reflection:(id *)reflection error:(id *)error;
+@end
+
+@interface SweetComputePipeline : SweetObject {
+	char cp_name[128];
+}
+- (void)setComputeName:(id)name;
+- (const char *)sweetComputeName;
+@end
+
+@implementation SweetComputePipeline
+- (void)setComputeName:(id)name
+{
+	snprintf(cp_name, sizeof(cp_name), "%s", sweet_cstr(name));
+}
+- (const char *)sweetComputeName
+{
+	return cp_name[0] != 0 ? cp_name : "-";
+}
 @end
 
 static id sweet_pipeline_named(id name);
@@ -1661,7 +1686,9 @@ sweet_log_compute_pso(id function)
 {
 	sweet_log("library", "newComputePipelineStateWithFunction:error:");
 	sweet_log_compute_pso(function);
-	return [[SweetOpaque alloc] init];
+	SweetComputePipeline *pipeline = [[SweetComputePipeline alloc] init];
+	[pipeline setComputeName:function != 0 ? sweet_msg_id(function, "name") : 0];
+	return pipeline;
 }
 
 - (void *)contents
@@ -1741,6 +1768,98 @@ sweet_log_compute_pso(id function)
 {
 	sweet_log("opaque", "functionType");
 	return 1;	/* MTLFunctionTypeVertex; 0 is invalid and aborts callers */
+}
+
+@end
+
+@implementation SweetCommandEncoder
+
+- (void)setComputePipelineState:(id)state
+{
+	enc_cpipe = state;
+}
+
+- (void)setTexture:(id)texture atIndex:(unsigned long)index
+{
+	if (index < 8) enc_ctex[index] = texture;
+}
+
+- (void)setBuffer:(id)buffer offset:(unsigned long)offset atIndex:(unsigned long)index
+{
+	if (index < 8) {
+		enc_cbuf[index] = buffer;
+		enc_cboff[index] = offset;
+	}
+}
+
+- (void)dispatchThreadgroups:(SweetSize)groups threadsPerThreadgroup:(SweetSize)threads
+{
+	static unsigned int logs;
+	if (logs++ >= 512) return;
+	if (console_fd < 0) console_fd = open("/dev/console", 1);
+	const char *name = enc_cpipe != 0 ?
+	    ((const char *(*)(id, SEL))objc_msgSend)(enc_cpipe,
+	    sel_registerName("sweetComputeName")) : "-";
+	if (console_fd >= 0) {
+		dprintf(console_fd,
+		    "SWEETMETAL: compute dispatch kind=groups pso=%s groups=%lux%lux%lu tpg=%lux%lux%lu pipeline=%p%c",
+		    name ? name : "-", groups.x, groups.y, groups.z,
+		    threads.x, threads.y, threads.z, enc_cpipe, 10);
+		for (unsigned long i = 0; i < 8; i++) {
+			if (enc_ctex[i] != 0) {
+				id tex = enc_ctex[i];
+				unsigned int sid = ((unsigned int (*)(id, SEL))objc_msgSend)(
+				    tex, sel_registerName("surfaceID"));
+				unsigned long width = sweet_msg_ul(tex, "width");
+				unsigned long height = sweet_msg_ul(tex, "height");
+				dprintf(console_fd,
+				    "SWEETMETAL: compute tex%lu=%p sid=%u size=%lux%lu fmt=%lu class=%s%c",
+				    i, tex, sid, width, height,
+				    sweet_msg_ul(tex, "pixelFormat"), object_getClassName(tex), 10);
+			}
+			if (enc_cbuf[i] != 0) {
+				dprintf(console_fd,
+				    "SWEETMETAL: compute buf%lu=%p offset=%lu class=%s%c",
+				    i, enc_cbuf[i], enc_cboff[i],
+				    object_getClassName(enc_cbuf[i]), 10);
+			}
+		}
+	}
+}
+
+- (void)dispatchThreads:(SweetSize)threads threadsPerThreadgroup:(SweetSize)threads_per_group
+{
+	static unsigned int logs;
+	if (logs++ >= 512) return;
+	if (console_fd < 0) console_fd = open("/dev/console", 1);
+	const char *name = enc_cpipe != 0 ?
+	    ((const char *(*)(id, SEL))objc_msgSend)(enc_cpipe,
+	    sel_registerName("sweetComputeName")) : "-";
+	if (console_fd >= 0) {
+		dprintf(console_fd,
+		    "SWEETMETAL: compute dispatch kind=threads pso=%s grid=%lux%lux%lu tpg=%lux%lux%lu pipeline=%p%c",
+		    name ? name : "-", threads.x, threads.y, threads.z,
+		    threads_per_group.x, threads_per_group.y, threads_per_group.z,
+		    enc_cpipe, 10);
+		for (unsigned long i = 0; i < 8; i++) {
+			if (enc_ctex[i] != 0) {
+				id tex = enc_ctex[i];
+				unsigned int sid = ((unsigned int (*)(id, SEL))objc_msgSend)(
+				    tex, sel_registerName("surfaceID"));
+				dprintf(console_fd,
+				    "SWEETMETAL: compute tex%lu=%p sid=%u size=%lux%lu fmt=%lu class=%s%c",
+				    i, tex, sid, sweet_msg_ul(tex, "width"),
+				    sweet_msg_ul(tex, "height"), sweet_msg_ul(tex, "pixelFormat"),
+				    object_getClassName(tex), 10);
+			}
+			if (enc_cbuf[i] != 0) {
+				dprintf(console_fd,
+				    "SWEETMETAL: compute buf%lu=%p offset=%lu class=%s%c",
+				    i, enc_cbuf[i], enc_cboff[i],
+				    object_getClassName(enc_cbuf[i]), 10);
+			}
+		}
+	}
 }
 
 @end
