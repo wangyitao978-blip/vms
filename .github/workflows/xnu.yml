@@ -111,7 +111,9 @@ jobs:
         env:
           # keep going after errors so one run reports every compile failure
           MAKEFLAGS: ${{ inputs.keep_going == 'false' && '' || '-k' }}
-        run: bash build.sh
+        run: |
+          set -o pipefail
+          bash build.sh 2>&1 | tee ../xnu-build.log
 
       - name: Verify SweetSurface patch is present in the built source tree
         if: always()
@@ -125,15 +127,22 @@ jobs:
           test -n "$SURFACE" || { echo "::error::SweetSurface.cpp not found in build tree"; exit 1; }
           GPU="$(find dxb -path '*iokit/Kernel/arm/SweetGPU.cpp' -print -quit)"
           test -n "$GPU" || { echo "::error::SweetGPU.cpp not found in build tree"; exit 1; }
-          if grep -q 'SWEET SURF: memory' "$SURFACE" && grep -q 'kSweetGPUSurfaceMap' "$GPU"; then
-            echo "0097 applied."
+          SURFACE_MARKERS=$(grep -c 'SWEET SURF: memory' "$SURFACE" || true)
+          GPU_MARKERS=$(grep -c 'kSweetGPUSurfaceMap' "$GPU" || true)
+          echo "SWEET SURF: memory markers=$SURFACE_MARKERS"
+          echo "kSweetGPUSurfaceMap markers=$GPU_MARKERS"
+          if [ "$SURFACE_MARKERS" -ge 1 ] && [ "$GPU_MARKERS" -ge 1 ]; then
+            echo "0097a/0097b applied."
           else
             echo "::error::0097 NOT applied (expected SweetSurface/SweetGPU markers are missing)"
             exit 1
           fi
           {
             echo '### XNU patch verification'
-            echo '- 0097 SweetSurface allocation and GPU surface-map changes are present in the source tree.'
+            echo "- SweetSurface allocation marker count: $SURFACE_MARKERS"
+            echo "- SweetGPU surface-map marker count: $GPU_MARKERS"
+            echo '- 0097a/0097b SweetGPU and SweetSurface changes are present in the source tree.'
+            echo '- Any 0097c VirtioConsole skip is reported above and does not roll back the other per-file patches.'
             echo "- XNU source commit: $GITHUB_SHA"
           } >> "$GITHUB_STEP_SUMMARY"
 
