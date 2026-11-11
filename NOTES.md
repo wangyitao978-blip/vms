@@ -1681,3 +1681,11 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - Added background first-run extraction to `files/vm/sweet-qemu-gpu-payload.bin`, SHA-256 verification, atomic replacement, and `payload.ver` version/hash marker. MainActivity uses this bundled payload by default; it does not silently boot an old manually imported payload.
 - APK workflow verifies that both `assets/boot/sweet-qemu-gpu-payload.bin` and `assets/boot/payload.sha256` exist in the final APK and that the embedded binary hash matches. Payload asset stays compressed (removed `bin` from `noCompress`).
 - Build result pending final CI run; device extraction check remains pending.
+
+
+### 2026-11-12 Host Raster payload bundled APK build verified
+- APK workflow run `43084051387` succeeded from APK code commit `2e6e509a8c15de08278b8f37568dc301b531ecbb`. Artifact `vmios-debug-apk-with-engine` ID `13886195524`, 56,799,786 bytes; APK SHA-256 `bee0238250de0893f7ded540ee5f91fc266dd262f8fbe7edd858900c7492a994`.
+- CI injected only the Host Raster payload from Payload run `43079641260` and verified both boot assets inside the final APK. Embedded payload SHA-256: `7204f83ba7a8370f1134915fc2f47516e66366e038c2d6f62bb06d5b584c4e8d`. Guest Local is not included.
+- Added BootAssets first-run extraction with atomic file write, payload hash verification, and app-version/hash marker. MainActivity defaults to this bundled payload. Actual device extraction is pending.
+- Earlier failed attempts: verification block was initially placed against the upstream QEMU APK rather than the final APK, then compilation caught a missing BuildConfig and a literal escaped newline. Both were corrected; the successful run above includes the final source and all verification steps.
+- Workflow push paths now include only `.github/workflows/build-apk.yml` and `android/**`, so ledger/README-only edits no longer cause redundant APK builds.
