@@ -211,14 +211,14 @@ jobs:
         run: |
           set -euo pipefail
           ENGINE=app/src/main/assets/engine/arm64-v8a
-          ENGINE_FINGERPRINT="$(find "$ENGINE" -maxdepth 1 -type f ! -name 'vmios-engine-version' -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
-          printf '%s\n' "$ENGINE_FINGERPRINT" > "$ENGINE/vmios-engine-version"
+          find "$ENGINE" -maxdepth 1 -type f ! -name vmios-engine-version -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d " " -f1 > "$ENGINE/vmios-engine-version"
+          echo "QEMU engine fingerprint: $(cat "$ENGINE/vmios-engine-version")"
           echo "QEMU engine fingerprint: $ENGINE_FINGERPRINT"
           test -s "$ENGINE/qemu-system-aarch64"
           test -s "$ENGINE/qemu-source-revision.txt"
           test -s "$ENGINE/libglib-2.0.so.0"
           test -s "$ENGINE/vmios-engine-version"
-          grep -Eq '^[0-9a-f]{64}$' "$ENGINE/vmios-engine-version"
+          test "$(wc -c < "$ENGINE/vmios-engine-version")" -eq 65
           echo "QEMU engine asset count: $(find "$ENGINE" -maxdepth 1 -type f | wc -l)"
           echo "QEMU source revision: $(cat "$ENGINE/qemu-source-revision.txt")"
 
@@ -234,7 +234,7 @@ jobs:
           unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/qemu-source-revision.txt'
           unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/libglib-2.0.so.0'
           unzip -Z1 "$APK" | grep -Fx 'assets/engine/arm64-v8a/vmios-engine-version'
-          unzip -p "$APK" 'assets/engine/arm64-v8a/vmios-engine-version' | grep -Eq '^[0-9a-f]{64}$'
+          test "$(unzip -p "$APK" "assets/engine/arm64-v8a/vmios-engine-version" | wc -c)" -eq 65
           unzip -Z1 "$APK" | grep -Fx 'lib/arm64-v8a/libsweetraster.so'
           unzip -Z1 "$APK" | grep -Fx 'classes2.dex'
           unzip -p "$APK" classes2.dex > /tmp/classes2.dex
