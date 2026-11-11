@@ -1685,3 +1685,9 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - 3-vCPU profile: `debug=0x8`, `sweetfb_hz=15`, `tlto_us/slto_us=2000000`; both payload ADT variants use `mkadt.py --qemu-cpus 3`. `mkpayload.py` has no CPU-count flag.
 - CA draw protocol `reserved` carries `tex_fn`; local raster alpha-only handling for functions 18/48. Removed draw-frag/compute-PSO traces; offscreen surface logs capped at 8, IOSurface failure reasons deduplicated, host flush traces first 8/every 64.
 - No kernel changes; XNU #77 is the workflow input. No blur/clear optimization.
+
+
+### 2026-11-12 final Host Raster payload build
+- Final correction covers both heap-local and IOSurface-backed local raster paths for tex_fn 18/48 alpha masks. Render-target log cap 8; host-flush failure cap first 8/every64. No blur/clear optimization.
+- Payload workflow now emits only the 3-vCPU Host Raster artifact; Guest Local is intentionally not rebuilt or bundled. Historical 4-vCPU Host Raster artifact remains in run `43047319308`, artifact `13867657031`.
+- Final successful build run `43079641260`, commit `3547230786df69f26dd0af59280f43e392b83cfc`, artifact `13882834913`. XNU #77 run `43022096198` unchanged. Device validation pending.

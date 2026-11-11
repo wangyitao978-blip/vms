@@ -89,3 +89,10 @@ No source code has yet been ported in this branch. Record actual commits and run
 - `sweet_ca_batch` writes `r->tex_fn` to protocol `reserved` (offset 84). Guest local raster treats tex_fn 18/48 as alpha masks (multiplies alpha only); other functions keep RGBA modulation.
 - Removed `draw frag=` and `compute pso` logs; offscreen IOSurface success logs capped at 8; IOSurface creation failures logged once per reason; host flush summary/timeout logs capped to first 8 and every 64th flush. No blur or clear coalescing changes.
 - Payload build is triggered by the branch push; workflow watches `tools/bootargs.py` as well as SweetMetal/workflow changes. XNU #77 is reused; no XNU source/build changes.
+
+
+## 2026-11-12 final Host Raster correction
+- Corrected the second local-raster branch (heap-backed texture path) to apply alpha-only modulation for tex_fn 18/48 as well; previously only the IOSurface-backed branch had the mask behavior.
+- Capped render-target offscreen IOSurface logs at 8 and host-flush failure logs at the first 8 and every 64th failure. The successful offscreen IOSurface logs were already capped at 8; IOSurface creation failures remain deduplicated by reason. `draw frag=` and `compute pso` traces remain absent. No blur or clear-coalescing code touched.
+- Payload workflow now produces only `vmios-host-raster-payload`; it uses `mkadt.py --qemu-cpus 3`. The old 4-vCPU host artifact and historical guest-local artifacts are retained in their original Actions runs and were not deleted or overwritten.
+- Successful final Host Raster build: run `43079641260`, source `3547230786df69f26dd0af59280f43e392b83cfc`, artifact `13882834913` (12,574,633 bytes). XNU run `43022096198` (#77) reused unchanged. Build is CI-verified, not device-verified.
