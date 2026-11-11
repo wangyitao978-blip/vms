@@ -160,7 +160,8 @@ public final class MainActivity extends Activity {
         final File bundled = BootAssets.payloadFile(this);
         new Thread(() -> {
             try {
-                BootAssets.ensure(getApplicationContext(), getPackageManager()\n                        .getPackageInfo(getPackageName(), 0).versionCode);
+                BootAssets.ensure(getApplicationContext(), getPackageManager()
+                        .getPackageInfo(getPackageName(), 0).versionCode);
                 runOnUiThread(() -> {
                     cfg.payloadPath = bundled.getAbsolutePath();
                     cfg.save(this);
