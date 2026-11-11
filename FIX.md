@@ -28,3 +28,12 @@ No source code has yet been ported in this branch. Record actual commits and run
 - XNU: push trigger now listens to `xun` instead of `main`; commit `be6516ea6a4bffe36076eca956c5e55b7965fbd0`. The push is expected to start the XNU build; verify its run and artifacts before using it.
 
 - Branch build triggered by XNU workflow correction: run `42900388186`, head `be6516ea6a4bffe36076eca956c5e55b7965fbd0`, in progress at verification. URL: https://github.com/wangyitao978-blip/vms/actions/runs/42900388186. This is a workflow correction build, not proof that the kernel patch is included or the device issue is fixed.
+
+
+## 2026-11-11 A1 offscreen IOSurface routing
+- Review result: A1's core design is valid, but the repository already had IOSurface allocation/lifetime support on `apk`; the missing path was host routing of an owned internal render-target IOSurface. Do not duplicate the allocator.
+- APK source fix: `vm/metal/SweetMetal.m` commit `4d3406fef4fa7a6c6c8071c3e400a4af858424d6`. Host routing now treats either a cross-process mapped IOSurface or an owned internal render-target IOSurface (`ownsRenderSurface`) as directly mappable and sends its surface ID to `sweet_ca_map`. The 1 MiB ceiling remains only for heap-backed fallback uploads; it no longer blocks IOSurface-backed textures. Actual IOSurface bytesPerRow is preserved.
+- Payload review: `android/app/src/main/java/dev/vmios/sweetvm/CaCompositor.java` already avoids reusing decoded pixels for `F_INTERNAL` surfaces and reuses the output array, so no Java change was needed on `payload`.
+- Wired budget: IOSurface lifetime is released by `SweetTexture::releaseRenderSurface`/dealloc, allowing the kernel Surface free path to return wired accounting. No LRU eviction was added: evicting a live CA-owned render target would invalidate an active texture. If the 1536 MiB wired budget or IOSurface allocator rejects a new surface, the existing heap/local-raster fallback remains; that case is safe but will not gain A1 host acceleration. A safe inactive-resource eviction policy remains separate work.
+- Scope correction: exploratory Metal/Java edits made on `xun` during this pass were reverted because those files belong on their APK/Payload build branches. Reverts: `b3c3d7bfdf48ceb55a0b213d3c261a0dcf2aa7c9` and `a2a9e8cc40a65ea9080a334caed29c192ec2ac98`. The XNU patch was not changed in this A1 pass.
+- Build/device validation: not yet verified. The APK source commit is committed; do not treat it as a successful APK build or device test. No new XNU/Payload build is claimed.
