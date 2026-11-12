@@ -1727,3 +1727,9 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 ### 2026-11-12 CPU/RAM metrics APK success
 - MainActivity CPU/RAM metric update built successfully in run 43200089564. Artifact ID 13935660309 (56,802,787 bytes), ZIP SHA-256 a6d8551a8813380c91edfdd489f266a45f751f774bd1994bd2ded4605c45e83c.
 - Payload run 43153882640 embedded and re-extracted from the APK; SHA-256 verified as f0ba32ef8b5de8b4ffdb8e4b91842361215227a6aa681c2e5e6f96c30eaf98eb. Device validation pending.
+
+
+### 2026-11-12 MTTCG default and preference migration
+- MTTCG now defaults true; one-time mttcg_default_v2 migration overrides a previously saved false and persists true for existing installs.
+- Existing iosCmdline logic appends tcgmulti=1 and sets tlto_us/slto_us to 2000000; VmEngine retains the required timeout guard and selects multi-threaded TCG for 2+ CPUs.
+- BootConfig commit ed3b06a38bd755925c71122233d51bebfd9cd176. Rebuild APK using the existing four-vCPU Host Raster payload; CI/device verification pending.
