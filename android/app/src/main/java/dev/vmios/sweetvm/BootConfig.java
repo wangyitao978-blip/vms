@@ -17,6 +17,7 @@ public final class BootConfig {
     private static final String KEY_CMDLINE = "cmdline";
     private static final String KEY_FPS = "fps";
     private static final String KEY_MTTCG = "mttcg";
+    private static final String KEY_MTTCG_DEFAULT_V2 = "mttcg_default_v2";
     private static final String KEY_OFFLOAD = "offload";
     private static final String KEY_OFFLOAD_SAFE_DEFAULT = "offload_safe_default_v1";
 
@@ -38,7 +39,14 @@ public final class BootConfig {
         // 15 fps floor is a leftover of the old default: reset it to 30.
         int savedFps = p.getInt(KEY_FPS, 30);
         c.fps = savedFps < 15 ? 30 : Math.min(60, savedFps);
-        c.mttcg = p.getBoolean(KEY_MTTCG, false);
+        c.mttcg = p.getBoolean(KEY_MTTCG, true);
+        if (!p.getBoolean(KEY_MTTCG_DEFAULT_V2, false)) {
+            // Enable MTTCG once for existing installs after the settings UI was removed.
+            // Persist true so a previously saved false value cannot silently disable it.
+            c.mttcg = true;
+            p.edit().putBoolean(KEY_MTTCG, true)
+                    .putBoolean(KEY_MTTCG_DEFAULT_V2, true).apply();
+        }
         if (!p.getBoolean(KEY_OFFLOAD_SAFE_DEFAULT, false)) {
             // The previous app defaulted native present on before device validation.
             // Disable it once on upgrade, then respect the user's saved choice.
