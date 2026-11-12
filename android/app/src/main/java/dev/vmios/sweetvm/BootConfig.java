@@ -24,7 +24,7 @@ public final class BootConfig {
     public String cmdline = "";
     public int fps = 30;
     public boolean mttcg;
-    public boolean offload = true;
+    public boolean offload = false;
 
     public static BootConfig load(Context ctx) {
         SharedPreferences p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
@@ -38,7 +38,7 @@ public final class BootConfig {
         int savedFps = p.getInt(KEY_FPS, 30);
         c.fps = savedFps < 15 ? 30 : Math.min(60, savedFps);
         c.mttcg = p.getBoolean(KEY_MTTCG, false);
-        c.offload = p.getBoolean(KEY_OFFLOAD, true);
+        c.offload = p.getBoolean(KEY_OFFLOAD, false);
         return c;
     }
 
