@@ -102,3 +102,9 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Changed `tools/bootargs.py` VM profile from `cpus=3` to `cpus=4`; changed the Host Raster workflow's `tools/mkpayload.py --qemu --qemu-cpus` argument from 3 to 4.
 - Preserved `debug=0x8`, `sweetfb_hz=15`, `tlto_us=2000000`, `slto_us=2000000`; preserved tex_fn header protocol and both local raster alpha-mask paths; draw-frag/compute-PSO logs remain removed. No blur-related code touched.
 - Payload build run `43153882640` is in progress. Record final artifact ID and SHA-256 here after successful completion; do not use the old 3-vCPU artifact as the new result.
+
+
+## 2026-11-12 four-vCPU payload artifact verified
+- Workflow run 43153882640 completed successfully on payload branch. It generates the QEMU ADT with tools/mkadt.py --qemu --qemu-cpus 4 (mkpayload.py itself has no --qemu-cpus option); tools/bootargs.py VM profile is cpus=4.
+- Artifact vmios-host-raster-payload ID 13915046036 (12,574,632 bytes). Payload binary SHA-256: f0ba32ef8b5de8b4ffdb8e4b91842361215227a6aa681c2e5e6f96c30eaf98eb, independently checked during APK injection and post-build APK extraction.
+- Preserved debug=0x8, sweetfb_hz=15, tlto_us=2000000, slto_us=2000000; tex_fn protocol and alpha-only mask behavior remain. No Guest Local payload was packaged. CI success is not device validation.
