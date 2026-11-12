@@ -118,3 +118,9 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Replaced CPU sampling with summed aggregate /proc/stat fields user..steal (excluding guest fields), multiplied by availableProcessors() to report per-core 100% units, capped at NCPU*100. First sample remains unavailable by design; an initial sample is taken after binding the metric TextViews so the next ticker interval can display a delta.
 - CPU label now shows CPU N%/M%; RAM label shows used/total GiB and percentage. Clock/CPU/RAM text sizes scale to U()*0.28f.
 - Source commit: 34a6ee804ad9ecf13dbfd0ab946849551199cdb5. APK CI triggered by this push; build/artifact result to be recorded after verification. No changes to payload, xun, or main; no XNU build. Device runtime readings remain unverified.
+
+
+## 2026-11-12 host CPU/RAM metrics APK build verified
+- MainActivity metrics commit: 34a6ee804ad9ecf13dbfd0ab946849551199cdb5. CPU reports per-core scale and total capacity, RAM includes used/total and percentage, metrics text scales with U, first sample is prewarmed. Existing M1 top z-order retained.
+- Successful APK workflow run: 43200089564, head 34a6ee804ad9ecf13dbfd0ab946849551199cdb5. Artifact vmios-debug-apk-with-engine ID 13935660309, 56,802,787 bytes; artifact ZIP SHA-256 a6d8551a8813380c91edfdd489f266a45f751f774bd1994bd2ded4605c45e83c.
+- CI verified the bundled Host Raster payload from run 43153882640; embedded payload SHA-256 f0ba32ef8b5de8b4ffdb8e4b91842361215227a6aa681c2e5e6f96c30eaf98eb. No Guest Local was injected. Device-side display/runtime verification remains pending.
