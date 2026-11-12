@@ -1716,3 +1716,9 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - QEMU affinity mask `8c`, guest boot arg `cpus=4`; payload build profile and qemu-cpus flag restored to 4.
 - Retained adaptive 9.5U bottom bar, scaled labels, immersive screen visibility and top status z-order. Offload default remains disabled. No startup overlay.
 - APK CI payload source updated to Host Raster run `43153882640` (success, 4 vCPU); Guest Local excluded. APK build pending.
+
+
+### 2026-11-12 host metrics display correction
+- APK MainActivity: CPU aggregate /proc/stat now reports per-core scale (single fully busy core ≈100%, all cores busy ≈NCPU*100%), with guest counters excluded and first-sample prewarm. Display format includes the host logical CPU capacity, e.g. CPU 312%/800%.
+- RAM now displays used/total GiB plus used percentage. Top clock/CPU/RAM text scales with U. Existing top z-order fix is retained (above displayArea, below the later root-image overlay).
+- Commit 34a6ee804ad9ecf13dbfd0ab946849551199cdb5. Awaiting CI and on-device validation.
