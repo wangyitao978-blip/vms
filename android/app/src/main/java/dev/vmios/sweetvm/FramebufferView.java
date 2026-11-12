@@ -32,6 +32,7 @@ public final class FramebufferView extends View {
                 0, 0, 0, 1, 0
         });
         paint.setColorFilter(new ColorMatrixColorFilter(rbSwap));
+        paint.setFilterBitmap(true);
     }
 
     public interface TouchListener {
@@ -51,8 +52,10 @@ public final class FramebufferView extends View {
             return true;
         }
         // The view itself is exactly FB_W x FB_H and centered by its parent.
-        float gx = e.getX();
-        float gy = e.getY();
+        float w = getWidth(), h = getHeight();
+        if (w <= 0 || h <= 0) return true;
+        float gx = e.getX() * Payload.FB_W / w;
+        float gy = e.getY() * Payload.FB_H / h;
         if (gx < 0 || gy < 0 || gx >= Payload.FB_W || gy >= Payload.FB_H) {
             return true;
         }
@@ -119,9 +122,18 @@ public final class FramebufferView extends View {
             if (front == null) {
                 return;
             }
-            // The parent measures this View at exactly FB_W x FB_H.
-            // Draw at its origin; the parent supplies the black letterbox.
-            canvas.drawBitmap(front, 0f, 0f, paint);
+            int w = getWidth(), h = getHeight();
+            if (w <= 0 || h <= 0) return;
+            if (w == front.getWidth() && h == front.getHeight()) {
+                canvas.drawBitmap(front, 0f, 0f, paint);
+            } else {
+                float sx = w / (float) front.getWidth();
+                float sy = h / (float) front.getHeight();
+                canvas.save();
+                canvas.scale(sx, sy);
+                canvas.drawBitmap(front, 0f, 0f, paint);
+                canvas.restore();
+            }
         }
     }
 }
