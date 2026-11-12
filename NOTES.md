@@ -1699,3 +1699,12 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - Host CPU uses `/proc/stat` deltas; host RAM uses `MemAvailable` from `/proc/meminfo`; status updates every second. Timer starts with VM and resets to zero when stopped. Start is disabled while running; stop remains the Back-key dialog. Side controls are visual-only with press feedback.
 - Final build run `43086133597` success, commit `698ed076a96299944fa4b317655dc738c4c89a41`; artifact ID `13886706807`, 56,802,009 bytes. APK SHA-256 `f6b32d2b84165144c31d55ee0925e56b2a3639b77ccde1c5cb3674995e51479f`. Bundled Host Raster hash `7204f83ba7a8370f1134915fc2f47516e66366e038c2d6f62bb06d5b584c4e8d` verified in final APK; Guest Local excluded.
 - CI compilation/build and APK payload verification passed. Real-device layout, screenshot, picker interaction, immersion touch, and timer/host metrics still require device validation. No main/payload/xun changes and no XNU rebuild.
+
+
+### 2026-11-12 layout and offload safety fixes
+- Bottom bar now uses adaptive U capped at 36dp, scaled to available screen width, with 2.5U middle buttons and total width 9.5U. Side keys follow U and button text scales with U.
+- Immersive mode keeps the framebuffer visible. A tap on the framebuffer restores controls; the restoring tap is consumed and ordinary guest touch remains unchanged outside immersive mode.
+- Framebuffer container is inserted before the top metrics strip so the strip is layered above the display.
+- Native present/offload defaults false. Existing installs are migrated once from the former implicit true default to false; later user selections are preserved.
+- Startup overlay intentionally omitted as requested.
+- Build pending after commits `84e5d778`, `b699c38c`, `23f7b1ad`, `b5a049fa`. Final artifact must be taken from the latest successful workflow, not previous UI artifact.
