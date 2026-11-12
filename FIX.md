@@ -103,3 +103,11 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Per user instruction, no startup progress overlay was added.
 - Source commits: MainActivity layout `84e5d778`, BootConfig safe default `b699c38c` plus one-time migration `23f7b1ad`, immersive framebuffer touch `b5a049fa`.
 - Final CI: run `43145023104` succeeded on source commit `b5a049faa745aecd4104995571481ebf177282c5`; artifact `vmios-debug-apk-with-engine` ID `13911560772`, 56,802,721 bytes. APK SHA-256 `dcfa6b58999441c75bfa92db2fee83ffa9796be73a1eb37cc8d80ff341a95d93`; bundled Host Raster SHA-256 verified as `7204f83ba7a8370f1134915fc2f47516e66366e038c2d6f62bb06d5b584c4e8d`. Guest Local excluded.
+
+
+## 2026-11-12 four-vCPU + scaled framebuffer correction
+- FramebufferView now scales the 1125x2436 front bitmap to the actual View dimensions (filter bitmap enabled), and maps touch coordinates back to guest FB_W/FB_H. This fixes image placement and touch alignment in shrink/fullscreen modes.
+- VmEngine taskset mask changed from `e0` to `8c`; MainActivity boot args now force `cpus=4`. Payload workflow/VM profile are restored to four CPUs.
+- Existing adaptive U/Mid bottom bar and side-key sizing, U-scaled button text, immersive display preservation, and top metrics z-order are retained. Top is explicitly brought above display and below the later overlay.
+- Offload remains false by default including one-time migration of old installs. Startup overlay intentionally omitted per prior instruction.
+- APK workflow now bundles Host Raster payload from successful four-vCPU payload run `43153882640`; Guest Local is not included. APK build run pending.
