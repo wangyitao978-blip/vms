@@ -124,3 +124,9 @@ No source code has yet been ported in this branch. Record actual commits and run
 - MainActivity metrics commit: 34a6ee804ad9ecf13dbfd0ab946849551199cdb5. CPU reports per-core scale and total capacity, RAM includes used/total and percentage, metrics text scales with U, first sample is prewarmed. Existing M1 top z-order retained.
 - Successful APK workflow run: 43200089564, head 34a6ee804ad9ecf13dbfd0ab946849551199cdb5. Artifact vmios-debug-apk-with-engine ID 13935660309, 56,802,787 bytes; artifact ZIP SHA-256 a6d8551a8813380c91edfdd489f266a45f751f774bd1994bd2ded4605c45e83c.
 - CI verified the bundled Host Raster payload from run 43153882640; embedded payload SHA-256 f0ba32ef8b5de8b4ffdb8e4b91842361215227a6aa681c2e5e6f96c30eaf98eb. No Guest Local was injected. Device-side display/runtime verification remains pending.
+
+
+## 2026-11-12 enable MTTCG by default and migrate existing installs
+- BootConfig.load now defaults KEY_MTTCG to true. One-time migration key mttcg_default_v2 forces KEY_MTTCG=true for existing installs (including preferences previously saved false), then marks migration complete.
+- MainActivity.iosCmdline already appends tcgmulti=1 when cfg.mttcg is true and explicitly sets tlto_us=2000000 and slto_us=2000000 whenever MTTCG is requested or already present. VmEngine retains the hard validation that refuses MTTCG without both explicit 2-second timeouts and selects tcg,thread=multi when cpus>=2 and tcgmulti=1.
+- BootConfig source commit: ed3b06a38bd755925c71122233d51bebfd9cd176. Four-vCPU Host Raster payload remains run 43153882640 / artifact 13915046036; APK workflow PAYLOAD_RUN_ID is 43153882640. CI and device validation pending at time of this note.
