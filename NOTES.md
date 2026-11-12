@@ -1707,4 +1707,5 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - Framebuffer container is inserted before the top metrics strip so the strip is layered above the display.
 - Native present/offload defaults false. Existing installs are migrated once from the former implicit true default to false; later user selections are preserved.
 - Startup overlay intentionally omitted as requested.
-- Build pending after commits `84e5d778`, `b699c38c`, `23f7b1ad`, `b5a049fa`. Final artifact must be taken from the latest successful workflow, not previous UI artifact.
+- Source commits: `84e5d778`, `b699c38c`, `23f7b1ad`, `b5a049fa`.
+- Final CI run `43145023104` succeeded on source commit `b5a049faa745aecd4104995571481ebf177282c5`; artifact ID `13911560772`, 56,802,721 bytes. APK SHA-256 `dcfa6b58999441c75bba92db2fee83ffa9796be73a1eb37cc8d80ff341a95d93`. Embedded Host Raster SHA-256 verified `7204f83ba7a8370f1134915fc2f47516e66366e038c2d6f62bb06d5b584c4e8d`; Guest Local excluded.
