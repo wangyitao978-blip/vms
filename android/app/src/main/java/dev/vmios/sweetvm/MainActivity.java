@@ -384,6 +384,10 @@ public final class MainActivity extends Activity {
         topLp.leftMargin = dp(4); topLp.rightMargin = dp(4);
         vmTimer = hostClock;
         vmCpu = hostCpu;
+        hostClock.setTextSize(TypedValue.COMPLEX_UNIT_PX, U() * 0.28f);
+        hostCpu.setTextSize(TypedValue.COMPLEX_UNIT_PX, U() * 0.28f);
+        hostRam.setTextSize(TypedValue.COMPLEX_UNIT_PX, U() * 0.28f);
+        readHostCpuPercent();
 
         displayArea = new FrameLayout(this);
         displayArea.setBackgroundColor(Color.BLACK);
@@ -558,36 +562,55 @@ public final class MainActivity extends Activity {
     }
 
     private int readHostCpuPercent() {
-        try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader("/proc/stat"))) {
+        try (java.io.BufferedReader r = new java.io.BufferedReader(
+                new java.io.FileReader("/proc/stat"))) {
             String line = r.readLine();
             if (line == null || !line.startsWith("cpu ")) return -1;
             String[] p = line.trim().split("\\s+");
             long total = 0;
-            for (int i = 1; i < p.length; i++) total += Long.parseLong(p[i]);
-            long idle = Long.parseLong(p[4]) + (p.length > 5 ? Long.parseLong(p[5]) : 0);
-            int percent = -1;
-            if (previousHostTotal >= 0 && total > previousHostTotal) {
-                long dt = total - previousHostTotal, di = idle - previousHostIdle;
-                percent = (int)Math.max(0, Math.min(100, (dt-di)*100/dt));
+            for (int i = 1; i < p.length && i <= 8; i++) {
+                total += Long.parseLong(p[i]);
             }
-            previousHostTotal = total; previousHostIdle = idle;
+            long idle = Long.parseLong(p[4])
+                    + (p.length > 5 ? Long.parseLong(p[5]) : 0);
+            int ncpu = Runtime.getRuntime().availableProcessors();
+            int percent = -1;
+            if (previousHostTotal > 0 && total > previousHostTotal) {
+                long dt = total - previousHostTotal;
+                long di = idle - previousHostIdle;
+                long busy = Math.max(0, dt - di);
+                percent = (int)Math.round((double) busy * ncpu * 100.0 / (double) dt);
+                int max = ncpu * 100;
+                if (percent > max) percent = max;
+            }
+            previousHostTotal = total;
+            previousHostIdle = idle;
             return percent;
-        } catch (Exception e) { return -1; }
+        } catch (Exception e) {
+            return -1;
+        }
     }
 
     private String readHostRam() {
-        try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader("/proc/meminfo"))) {
-            long total = -1, available = -1; String line;
+        try (java.io.BufferedReader r = new java.io.BufferedReader(
+                new java.io.FileReader("/proc/meminfo"))) {
+            long total = -1, available = -1;
+            String line;
             while ((line = r.readLine()) != null) {
-                if (line.startsWith("MemTotal:")) total = Long.parseLong(line.replaceAll("[^0-9]", ""));
-                else if (line.startsWith("MemAvailable:")) available = Long.parseLong(line.replaceAll("[^0-9]", ""));
+                if (line.startsWith("MemTotal:")) {
+                    total = Long.parseLong(line.replaceAll("[^0-9]", ""));
+                } else if (line.startsWith("MemAvailable:")) {
+                    available = Long.parseLong(line.replaceAll("[^0-9]", ""));
+                }
             }
             if (total > 0 && available >= 0) {
-                long used = (total-available)/1024;
-                return String.format(Locale.US, "RAM %.0f/%.0f GB", used/1024.0/1024.0, total/1024.0/1024.0);
+                double usedGb = (total - available) / 1024.0 / 1024.0;
+                double totalGb = total / 1024.0 / 1024.0;
+                int pct = (int)Math.round((total - available) * 100.0 / total);
+                return String.format(Locale.US, "RAM %.1f/%.0fG %d%%", usedGb, totalGb, pct);
             }
         } catch (Exception ignored) { }
-        return "RAM --/-- GB";
+        return "RAM --/-- G";
     }
 
     private final Runnable hostStatsTicker = new Runnable() {
@@ -597,8 +620,12 @@ public final class MainActivity extends Activity {
                 hostClock.setText(String.format(Locale.US,"⏱ %02d:%02d:%02d",
                         seconds/3600,(seconds/60)%60,seconds%60));
             }
+            int ncpu = Runtime.getRuntime().availableProcessors();
             int cpu = readHostCpuPercent();
-            if (hostCpu != null) hostCpu.setText(cpu < 0 ? "CPU --%" : "CPU " + cpu + "%");
+            if (hostCpu != null) {
+                hostCpu.setText(cpu < 0 ? "CPU --%/" + (ncpu * 100) + "%"
+                        : "CPU " + cpu + "%/" + (ncpu * 100) + "%");
+            }
             if (hostRam != null) hostRam.setText(readHostRam());
             ui.postDelayed(this,1000);
         }
