@@ -1709,3 +1709,10 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - Startup overlay intentionally omitted as requested.
 - Source commits: `84e5d778`, `b699c38c`, `23f7b1ad`, `b5a049fa`.
 - Final CI run `43145023104` succeeded on source commit `b5a049faa745aecd4104995571481ebf177282c5`; artifact ID `13911560772`, 56,802,721 bytes. APK SHA-256 `dcfa6b58999441c75bfa92db2fee83ffa9796be73a1eb37cc8d80ff341a95d93`. Embedded Host Raster SHA-256 verified `7204f83ba7a8370f1134915fc2f47516e66366e038c2d6f62bb06d5b584c4e8d`; Guest Local excluded.
+
+
+### 2026-11-12 four-vCPU display/touch correction
+- Framebuffer bitmap is scaled to View width/height with filtering; touch coordinates are inversely mapped to 1125x2436 guest coordinates.
+- QEMU affinity mask `8c`, guest boot arg `cpus=4`; payload build profile and qemu-cpus flag restored to 4.
+- Retained adaptive 9.5U bottom bar, scaled labels, immersive screen visibility and top status z-order. Offload default remains disabled. No startup overlay.
+- APK CI payload source updated to Host Raster run `43153882640` (success, 4 vCPU); Guest Local excluded. APK build pending.
