@@ -120,7 +120,7 @@ jobs:
           python3 tools/gpu-bundle.py list dist/host-raster/SweetMetalAccel.sgb
 
           python3 tools/mkadt.py dist/host-raster/qemu-gpu.adt \
-            --qemu --qemu-cpus 3 \
+            --qemu --qemu-cpus 4 \
             --gpu-wire \
             --canvas-width 1125 --canvas-height 2436 \
             --gpu-bundle dist/host-raster/SweetMetalAccel.sgb
