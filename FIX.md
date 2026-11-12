@@ -130,3 +130,10 @@ No source code has yet been ported in this branch. Record actual commits and run
 - BootConfig.load now defaults KEY_MTTCG to true. One-time migration key mttcg_default_v2 forces KEY_MTTCG=true for existing installs (including preferences previously saved false), then marks migration complete.
 - MainActivity.iosCmdline already appends tcgmulti=1 when cfg.mttcg is true and explicitly sets tlto_us=2000000 and slto_us=2000000 whenever MTTCG is requested or already present. VmEngine retains the hard validation that refuses MTTCG without both explicit 2-second timeouts and selects tcg,thread=multi when cpus>=2 and tcgmulti=1.
 - BootConfig source commit: ed3b06a38bd755925c71122233d51bebfd9cd176. Four-vCPU Host Raster payload remains run 43153882640 / artifact 13915046036; APK workflow PAYLOAD_RUN_ID is 43153882640. CI and device validation pending at time of this note.
+
+
+## 2026-11-12 MTTCG default migration APK verified
+- BootConfig commit ed3b06a38bd755925c71122233d51bebfd9cd176 sets MTTCG default true and performs one-time mttcg_default_v2 migration that persists KEY_MTTCG=true even when the old preference was false.
+- APK workflow run 43210151657 completed successfully (head ed3b06a38bd755925c71122233d51bebfd9cd176). Artifact vmios-debug-apk-with-engine ID 13939723861, 56,802,753 bytes; artifact ZIP SHA-256 0cc1d63a0724bac1fb96ac01ec40c965735b2bfc47deee30d61cbc7c1e707e45.
+- Injected four-vCPU Host Raster payload from run 43153882640; payload SHA-256 f0ba32ef8b5de8b4ffdb8e4b91842361215227a6aa681c2e5e6f96c30eaf98eb was re-verified after extraction from APK. Workflow PAYLOAD_RUN_ID is 43153882640.
+- MainActivity.iosCmdline's tcgmulti=1 and explicit tlto_us/slto_us=2000000 behavior remains unchanged; VmEngine's timeout hard guard and multi-thread TCG selection remain unchanged. Runtime log confirmation and device boot-duration measurement are still pending.
