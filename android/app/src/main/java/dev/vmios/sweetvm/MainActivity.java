@@ -397,6 +397,13 @@ public final class MainActivity extends Activity {
             TouchSender sender = touch;
             if (sender != null) sender.send(type, x, y);
         });
+        fbView.setOnTouchListener((v, event) -> {
+            if (!immersiveUi) return false;
+            if (event.getActionMasked() == android.view.MotionEvent.ACTION_UP) {
+                toggleImmersiveUi(false);
+            }
+            return true;
+        });
         displayArea.addView(fbView);
         if (running) engine.setView(fbView);
         updateDisplayGeometry();
@@ -543,11 +550,9 @@ public final class MainActivity extends Activity {
         if (immersiveUi) {
             screen.setOnClickListener(v -> toggleImmersiveUi(false));
             if (displayArea != null) displayArea.setOnClickListener(v -> toggleImmersiveUi(false));
-            if (fbView != null) fbView.setOnClickListener(v -> toggleImmersiveUi(false));
         } else {
             screen.setOnClickListener(null);
             if (displayArea != null) displayArea.setOnClickListener(null);
-            if (fbView != null) fbView.setOnClickListener(null);
         }
     }
 
