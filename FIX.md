@@ -93,3 +93,12 @@ No source code has yet been ported in this branch. Record actual commits and run
 - CI: run `43086133597` succeeded on APK commit `698ed076a96299944fa4b317655dc738c4c89a41`; artifact `vmios-debug-apk-with-engine` ID `13886706807`, 56,802,009 bytes. APK SHA-256 `f6b32d2b84165144c31d55ee0925e56b2a3639b77ccde1c5cb3674995e51479f`; embedded Host Raster payload SHA-256 again verified as `7204f83ba7a8370f1134915fc2f47516e66366e038c2d6f62bb06d5b584c4e8d`. Guest Local is not included.
 - Intermediate CI failures were caught and corrected before final success: duplicate `placeholderControl`, Android Activity method collision for `setImmersive`, and follow-up listener/geometry behavior. Earlier successful builds on intermediate commits are superseded by the final artifact above.
 - No device screenshot or runtime interaction test has been performed. The exact pixel layout, touch-to-restore behavior, CPU/RAM readings, and first-launch extraction still need on-device confirmation. No changes to `main`, `payload`, or `xun`; no XNU build.
+
+
+## 2026-11-12 display/offload corrective patch
+- Adaptive button geometry: `U=min(dp(36), round((screenWidthPx-dp(8))/9.5))`; middle mode key width `Mid=2.5U`; bottom bar width `2U+3Mid=9.5U`. Side controls use the same U. Bottom button font scales to `0.34U` px.
+- Immersive visibility now explicitly preserves `displayArea`; a framebuffer touch listener restores controls on ACTION_UP while consuming that tap only during immersive mode, so normal guest touch is unchanged outside immersive mode.
+- Child ordering corrected: displayArea is added before the top metrics strip so the top strip remains visible above the framebuffer.
+- Native framebuffer offload default changed to false. A one-time SharedPreferences migration also disables the old implicit-true setting on existing installs, then respects the user's later saved choice.
+- Per user instruction, no startup progress overlay was added.
+- Source commits: MainActivity layout `84e5d778`, BootConfig safe default `b699c38c` plus one-time migration `23f7b1ad`, immersive framebuffer touch `b5a049fa`. Final build is pending; do not use the previous UI artifact as containing these fixes.
