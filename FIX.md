@@ -111,3 +111,10 @@ No source code has yet been ported in this branch. Record actual commits and run
 - Existing adaptive U/Mid bottom bar and side-key sizing, U-scaled button text, immersive display preservation, and top metrics z-order are retained. Top is explicitly brought above display and below the later overlay.
 - Offload remains false by default including one-time migration of old installs. Startup overlay intentionally omitted per prior instruction.
 - APK workflow now bundles Host Raster payload from successful four-vCPU payload run `43153882640`; Guest Local is not included. APK build run pending.
+
+
+## 2026-11-12 host CPU/RAM metrics correction
+- APK branch only. MainActivity already had the M1 screen.bringChildToFront(top) after the bottom bar and before the optional root-image overlay; retained it unchanged, so the top metrics remain above the framebuffer and below the overlay.
+- Replaced CPU sampling with summed aggregate /proc/stat fields user..steal (excluding guest fields), multiplied by availableProcessors() to report per-core 100% units, capped at NCPU*100. First sample remains unavailable by design; an initial sample is taken after binding the metric TextViews so the next ticker interval can display a delta.
+- CPU label now shows CPU N%/M%; RAM label shows used/total GiB and percentage. Clock/CPU/RAM text sizes scale to U()*0.28f.
+- Source commit: 34a6ee804ad9ecf13dbfd0ab946849551199cdb5. APK CI triggered by this push; build/artifact result to be recorded after verification. No changes to payload, xun, or main; no XNU build. Device runtime readings remain unverified.
