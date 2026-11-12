@@ -275,7 +275,7 @@ public final class VmEngine {
         List<String> cmd = new ArrayList<>();
         // Pin the three QEMU vCPUs to host cpu5, cpu6 and cpu7 (affinity mask e0).
         cmd.add("/system/bin/taskset");
-        cmd.add("e0");
+        cmd.add("8c");
         cmd.add(qemu);
         // Multi-CPU boots stay at EL1 (no EL2): QEMU is started with -S and
         // the PSCI conduit is switched to SMC over QMP before cont. The
