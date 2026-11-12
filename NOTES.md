@@ -1691,3 +1691,8 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - Final correction covers both heap-local and IOSurface-backed local raster paths for tex_fn 18/48 alpha masks. Render-target log cap 8; host-flush failure cap first 8/every64. No blur/clear optimization.
 - Payload workflow now emits only the 3-vCPU Host Raster artifact; Guest Local is intentionally not rebuilt or bundled. Historical 4-vCPU Host Raster artifact remains in run `43047319308`, artifact `13867657031`.
 - Final successful build run `43079641260`, commit `3547230786df69f26dd0af59280f43e392b83cfc`, artifact `13882834913`. XNU #77 run `43022096198` unchanged. Device validation pending.
+
+
+### 2026-11-12 four-vCPU payload rebuild
+- Restored QEMU payload build argument and VM boot profile to 4 CPUs. Debug, framebuffer refresh and timeout bootargs unchanged. Existing tex_fn protocol, alpha-only local raster masks and log suppression retained. No blur code changes.
+- Run `43153882640` started; artifact SHA-256 pending build completion.
