@@ -67,7 +67,7 @@ TIMING = DEVICE + " sweetts=1 ufsstats=1 ufsstatsecs=5"
 VM = " ".join([
     "debug=0x8",
     "serial=3",
-    "cpus=3",
+    "cpus=4",
     "keepsyms=1",
     "-noprogress",
     "unentitled_ios_sim_launch=1",
