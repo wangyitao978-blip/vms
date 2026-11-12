@@ -18,6 +18,7 @@ public final class BootConfig {
     private static final String KEY_FPS = "fps";
     private static final String KEY_MTTCG = "mttcg";
     private static final String KEY_OFFLOAD = "offload";
+    private static final String KEY_OFFLOAD_SAFE_DEFAULT = "offload_safe_default_v1";
 
     public String rootPath = "";
     public String payloadPath = "";
@@ -38,7 +39,15 @@ public final class BootConfig {
         int savedFps = p.getInt(KEY_FPS, 30);
         c.fps = savedFps < 15 ? 30 : Math.min(60, savedFps);
         c.mttcg = p.getBoolean(KEY_MTTCG, false);
-        c.offload = p.getBoolean(KEY_OFFLOAD, false);
+        if (!p.getBoolean(KEY_OFFLOAD_SAFE_DEFAULT, false)) {
+            // The previous app defaulted native present on before device validation.
+            // Disable it once on upgrade, then respect the user's saved choice.
+            c.offload = false;
+            p.edit().putBoolean(KEY_OFFLOAD, false)
+                    .putBoolean(KEY_OFFLOAD_SAFE_DEFAULT, true).apply();
+        } else {
+            c.offload = p.getBoolean(KEY_OFFLOAD, false);
+        }
         return c;
     }
 
