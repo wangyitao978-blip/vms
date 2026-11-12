@@ -345,7 +345,12 @@ public final class MainActivity extends Activity {
         showMainScreen(false);
     }
 
-    private int U() { return dp(36); }
+    private int U() {
+        int avail = getResources().getDisplayMetrics().widthPixels - dp(8);
+        return Math.min(dp(36), Math.round(avail / 9.5f));
+    }
+
+    private int Mid() { return U() * 5 / 2; }
 
     private void showMainScreen(boolean running) {
         setVmSystemBars(false);
@@ -377,7 +382,6 @@ public final class MainActivity extends Activity {
         FrameLayout.LayoutParams topLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, U(), Gravity.TOP);
         topLp.leftMargin = dp(4); topLp.rightMargin = dp(4);
-        screen.addView(top, topLp);
         vmTimer = hostClock;
         vmCpu = hostCpu;
 
@@ -386,6 +390,7 @@ public final class MainActivity extends Activity {
         FrameLayout.LayoutParams areaLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         screen.addView(displayArea, areaLp);
+        screen.addView(top, topLp);
 
         fbView = new FramebufferView(this);
         fbView.setTouchListener((type, x, y) -> {
@@ -402,16 +407,17 @@ public final class MainActivity extends Activity {
         volume.setGravity(Gravity.CENTER);
         TextView volUp = placeholderControl("+", "音量增加（预留）", 18);
         TextView volDown = placeholderControl("−", "音量减少（预留）", 18);
-        LinearLayout.LayoutParams sideHalf = new LinearLayout.LayoutParams(U(), (int)(U()*1.5f));
+        int u = U();
+        LinearLayout.LayoutParams sideHalf = new LinearLayout.LayoutParams(u, (int)(u*1.5f));
         volume.addView(volUp, sideHalf);
-        volume.addView(volDown, new LinearLayout.LayoutParams(U(), (int)(U()*1.5f)));
-        FrameLayout.LayoutParams vlp = new FrameLayout.LayoutParams(U(), U()*3,
+        volume.addView(volDown, new LinearLayout.LayoutParams(u, (int)(u*1.5f)));
+        FrameLayout.LayoutParams vlp = new FrameLayout.LayoutParams(u, u*3,
                 Gravity.LEFT | Gravity.CENTER_VERTICAL);
         vlp.leftMargin = dp(4);
         screen.addView(volume, vlp);
 
         TextView power = placeholderControl("⏻", "电源按钮（预留）", 20);
-        FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(U(), U()*3,
+        FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(u, u*3,
                 Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         plp.rightMargin = dp(4);
         screen.addView(power, plp);
@@ -424,17 +430,18 @@ public final class MainActivity extends Activity {
         startButton = bottomButton("启动", "启动", true, () -> {
             if (!vmActive && cfg.rootFile() != null) startIos();
         });
-        bottom.addView(startButton, new LinearLayout.LayoutParams(U(), U()));
+        int mid = Mid();
+        bottom.addView(startButton, new LinearLayout.LayoutParams(u, u));
         modeOne = bottomButton("1:1", "原始尺寸", !running, () -> setDisplayMode(0));
-        bottom.addView(modeOne, new LinearLayout.LayoutParams(U()*3, U()));
+        bottom.addView(modeOne, new LinearLayout.LayoutParams(mid, u));
         modeShrink = bottomButton("缩小", "缩小到 80%", !running, () -> setDisplayMode(1));
-        bottom.addView(modeShrink, new LinearLayout.LayoutParams(U()*3, U()));
+        bottom.addView(modeShrink, new LinearLayout.LayoutParams(mid, u));
         modeFull = bottomButton("全屏", "等比铺满", !running, () -> setDisplayMode(2));
-        bottom.addView(modeFull, new LinearLayout.LayoutParams(U()*3, U()));
+        bottom.addView(modeFull, new LinearLayout.LayoutParams(mid, u));
         immersiveButton = bottomButton("沉浸", "沉浸", true, () -> toggleImmersiveUi(true));
-        bottom.addView(immersiveButton, new LinearLayout.LayoutParams(U(), U()));
+        bottom.addView(immersiveButton, new LinearLayout.LayoutParams(u, u));
         FrameLayout.LayoutParams bottomLp = new FrameLayout.LayoutParams(
-                U()*11, U(), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+                u*2 + mid*3, u, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         bottomLp.bottomMargin = dp(4);
         screen.addView(bottom, bottomLp);
 
@@ -463,6 +470,7 @@ public final class MainActivity extends Activity {
 
     private TextView bottomButton(String glyph, String label, boolean enabled, Runnable action) {
         TextView v = text(glyph, 13, enabled ? TEXT : 0xFF666666, true);
+        v.setTextSize(TypedValue.COMPLEX_UNIT_PX, U() * 0.34f);
         v.setGravity(Gravity.CENTER);
         v.setContentDescription(label);
         v.setBackground(outline(SURFACE_2, STROKE, 8, 1));
@@ -490,8 +498,8 @@ public final class MainActivity extends Activity {
     }
 
     private void setDisplayMode(int mode) {
-        if (mode == 0 && (displayArea == null || displayArea.getWidth() <= 1125
-                || displayArea.getHeight() <= 2436)) return;
+        if (mode == 0 && (rootView == null || rootView.getWidth() <= 1125
+                || rootView.getHeight() <= 2436)) return;
         displayMode = mode;
         updateDisplayGeometry();
     }
@@ -529,6 +537,7 @@ public final class MainActivity extends Activity {
         ViewGroup group = (ViewGroup) screen;
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);
+            if (child == displayArea) continue;
             child.setVisibility(immersiveUi ? View.GONE : View.VISIBLE);
         }
         if (immersiveUi) {
