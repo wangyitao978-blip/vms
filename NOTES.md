@@ -1733,3 +1733,9 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - MTTCG now defaults true; one-time mttcg_default_v2 migration overrides a previously saved false and persists true for existing installs.
 - Existing iosCmdline logic appends tcgmulti=1 and sets tlto_us/slto_us to 2000000; VmEngine retains the required timeout guard and selects multi-threaded TCG for 2+ CPUs.
 - BootConfig commit ed3b06a38bd755925c71122233d51bebfd9cd176. Rebuild APK using the existing four-vCPU Host Raster payload; CI/device verification pending.
+
+
+### 2026-11-12 MTTCG migration APK success
+- APK run 43210151657 succeeded with BootConfig migration commit ed3b06a38bd755925c71122233d51bebfd9cd176. Artifact ID 13939723861 (56,802,753 bytes), ZIP SHA-256 0cc1d63a0724bac1fb96ac01ec40c965735b2bfc47deee30d61cbc7c1e707e45.
+- Four-vCPU Host Raster payload run 43153882640 embedded and re-extracted with SHA-256 verified: f0ba32ef8b5de8b4ffdb8e4b91842361215227a6aa681c2e5e6f96c30eaf98eb.
+- MTTCG preference migration is in the APK source. Need device log confirmation of `engine cpus=4 accel=tcg,thread=multi`, boot args `tcgmulti=1`, and `psci smc set on 4 cpus`; boot-time performance is not yet measured.
