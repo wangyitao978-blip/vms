@@ -1722,3 +1722,8 @@ The APK can be built on Windows without Android Studio; the whole recipe (JDK 17
 - APK MainActivity: CPU aggregate /proc/stat now reports per-core scale (single fully busy core ≈100%, all cores busy ≈NCPU*100%), with guest counters excluded and first-sample prewarm. Display format includes the host logical CPU capacity, e.g. CPU 312%/800%.
 - RAM now displays used/total GiB plus used percentage. Top clock/CPU/RAM text scales with U. Existing top z-order fix is retained (above displayArea, below the later root-image overlay).
 - Commit 34a6ee804ad9ecf13dbfd0ab946849551199cdb5. Awaiting CI and on-device validation.
+
+
+### 2026-11-12 CPU/RAM metrics APK success
+- MainActivity CPU/RAM metric update built successfully in run 43200089564. Artifact ID 13935660309 (56,802,787 bytes), ZIP SHA-256 a6d8551a8813380c91edfdd489f266a45f751f774bd1994bd2ded4605c45e83c.
+- Payload run 43153882640 embedded and re-extracted from the APK; SHA-256 verified as f0ba32ef8b5de8b4ffdb8e4b91842361215227a6aa681c2e5e6f96c30eaf98eb. Device validation pending.
