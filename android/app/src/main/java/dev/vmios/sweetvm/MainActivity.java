@@ -451,6 +451,7 @@ public final class MainActivity extends Activity {
                 u*2 + mid*3, u, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         bottomLp.bottomMargin = dp(4);
         screen.addView(bottom, bottomLp);
+        screen.bringChildToFront(top);
 
         View.OnClickListener chooseRoot = v -> {
             if (!vmActive && (cfg.rootFile() == null || !cfg.rootFile().isFile())) pick(REQ_ROOT);
@@ -848,7 +849,7 @@ public final class MainActivity extends Activity {
         cmd = ensureQemuArgs(cmd);
         cmd = enableTouch(cmd);
         // Keep QEMU -smp and XNU-visible CPU topology at three.
-        cmd = setBootArg(cmd, "cpus", "3");
+        cmd = setBootArg(cmd, "cpus", "4");
         if (cfg.mttcg) {
             if (!cmd.contains("tcgmulti=1")) {
                 cmd = (cmd + " tcgmulti=1").trim();
